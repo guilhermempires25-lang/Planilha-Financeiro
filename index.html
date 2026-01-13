@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle Financeiro Pessoal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="main-header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fa-solid fa-sack-dollar"></i>
+                    <div>
+                        <h1>Controle Financeiro Pessoal</h1>
+                        <p>Gerencie suas finanças de forma simples e eficiente</p>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-outline" id="themeToggle" title="Alternar Tema">
+                        <i class="fa-solid fa-moon"></i>
+                    </button>
+                    <button class="btn btn-outline" onclick="document.getElementById('fileInput').click()">
+                        <i class="fa-solid fa-file-import"></i> Importar
+                    </button>
+                    <button class="btn btn-primary" onclick="window.app.exportData()">
+                        <i class="fa-solid fa-file-export"></i> Exportar
+                    </button>
+                    <input type="file" id="fileInput" accept=".json" style="display: none;"
+                        onchange="window.app.importData(this)">
+                </div>
+            </div>
+        </header>
+
+        <!-- Filters -->
+        <section class="filters-section">
+            <div class="input-group">
+                <label for="monthYear">Mês/Ano</label>
+                <input type="month" id="monthYear">
+            </div>
+            <div class="input-group">
+                <label for="initialBalance">Saldo Inicial (R$)</label>
+                <input type="number" id="initialBalance" value="0" step="0.01">
+            </div>
+        </section>
+
+        <!-- Dashboard Cards -->
+        <section class="dashboard-cards">
+            <div class="card card-green">
+                <div class="card-header">
+                    <span>Receitas</span>
+                    <i class="fa-solid fa-chart-line"></i>
+                </div>
+                <div class="card-value" id="incomeDisplay">R$ 0,00</div>
+            </div>
+            <div class="card card-red">
+                <div class="card-header">
+                    <span>Despesas</span>
+                    <i class="fa-solid fa-chart-area"></i>
+                </div>
+                <div class="card-value" id="expenseDisplay">R$ 0,00</div>
+            </div>
+            <div class="card card-blue">
+                <div class="card-header">
+                    <span>Saldo do Mês</span>
+                    <i class="fa-solid fa-wallet"></i>
+                </div>
+                <div class="card-value" id="monthlyBalanceDisplay">R$ 0,00</div>
+            </div>
+            <div class="card card-purple">
+                <div class="card-header">
+                    <span>Saldo Final</span>
+                    <i class="fa-solid fa-bullseye"></i>
+                </div>
+                <div class="card-value" id="finalBalanceDisplay">R$ 0,00</div>
+            </div>
+        </section>
+
+        <!-- Navigation Tabs -->
+        <nav class="tabs-nav">
+            <button class="tab-btn active" data-tab="resume">
+                <i class="fa-solid fa-chart-column"></i> Resumo
+            </button>
+            <button class="tab-btn" data-tab="categories">
+                <i class="fa-solid fa-tags"></i> Categorias
+            </button>
+            <button class="tab-btn" data-tab="fixed">
+                <i class="fa-solid fa-rotate"></i> Despesas Fixas
+            </button>
+            <button class="tab-btn" data-tab="projection">
+                <i class="fa-solid fa-calendar-days"></i> Projeção
+            </button>
+            <button class="tab-btn" data-tab="goals">
+                <i class="fa-solid fa-bullseye"></i> Metas
+            </button>
+            <button class="tab-btn" data-tab="cards">
+                <i class="fa-solid fa-credit-card"></i> Cartões
+            </button>
+        </nav>
+
+        <!-- Content Area -->
+        <main class="content-area">
+
+            <!-- RESUMO TAB (Transactions) -->
+            <div id="tab-resume" class="tab-content active">
+                <div class="section-header">
+                    <h2><i class="fa-solid fa-money-bill-transfer"></i> Transações</h2>
+                    <button class="btn btn-success" onclick="window.app.openModal()">
+                        <i class="fa-solid fa-plus"></i> Adicionar
+                    </button>
+                </div>
+                <div class="table-container">
+                    <table class="transactions-table">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Descrição</th>
+                                <th>Categoria</th>
+                                <th>Tipo</th>
+                                <th>Valor (R$)</th>
+                                <th>Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionsBody">
+                            <!-- Transactions -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- CATEGORIAS TAB -->
+            <div id="tab-categories" class="tab-content" style="display: none;">
+                <div class="section-header">
+                    <h2><i class="fa-solid fa-tags"></i> Gerenciar Categorias</h2>
+                    <div class="add-cat-form">
+                        <input type="text" id="newCatName" placeholder="Nova Categoria">
+                        <button class="btn btn-primary" onclick="window.app.addCategory()">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="categories-grid" id="categoriesList">
+                    <!-- Categories will be rendered here -->
+                </div>
+            </div>
+
+            <!-- DESPESAS FIXAS TAB -->
+            <div id="tab-fixed" class="tab-content" style="display: none;">
+                <div class="section-header">
+                    <h2><i class="fa-solid fa-rotate"></i> Despesas Fixas</h2>
+                    <button class="btn btn-success" onclick="window.app.openFixedModal()">
+                        <i class="fa-solid fa-plus"></i> Nova Fixa
+                    </button>
+                </div>
+                <!-- Controls for Fixed Expenses -->
+                <div class="fixed-expenses-controls"
+                    style="margin-bottom: 1rem; padding: 1rem; background: var(--bg-secondary); border-radius: var(--radius-md);">
+                    <p style="margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);">Gere
+                        automaticamente as transações deste mês com base nas despesas fixas cadastradas.</p>
+                    <button class="btn btn-primary" onclick="window.app.generateFixedExpenses()">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> Gerar no Mês Atual
+                    </button>
+                </div>
+                <div class="table-container">
+                    <table class="transactions-table">
+                        <thead>
+                            <tr>
+                                <th>Dia Venc.</th>
+                                <th>Descrição</th>
+                                <th>Categoria</th>
+                                <th>Valor (R$)</th>
+                                <th>Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fixedExpensesBody">
+                            <!-- Fixed Expenses -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- PROJEÇÃO TAB -->
+            <div id="tab-projection" class="tab-content" style="display: none;">
+                <div class="section-header">
+                    <h2><i class="fa-solid fa-chart-line"></i> Projeção Financeira</h2>
+                </div>
+                <div class="chart-container" style="position: relative; height: 400px; width: 100%;">
+                    <canvas id="projectionChart"></canvas>
+                </div>
+            </div>
+
+            <!-- METAS TAB -->
+            <div id="tab-goals" class="tab-content" style="display: none;">
+                <div class="section-header">
+                    <h2><i class="fa-solid fa-bullseye"></i> Metas Financeiras</h2>
+                    <button class="btn btn-success" onclick="window.app.openGoalModal()">
+                        <i class="fa-solid fa-plus"></i> Nova Meta
+                    </button>
+                </div>
+                <div class="goals-grid" id="goalsList">
+                    <!-- Goals Cards -->
+                </div>
+            </div>
+
+            <!-- CARTÕES TAB -->
+            <div id="tab-cards" class="tab-content" style="display: none;">
+                <div class="section-header">
+                    <h2><i class="fa-solid fa-credit-card"></i> Meus Cartões</h2>
+                    <button class="btn btn-success" onclick="window.app.openCardModal()">
+                        <i class="fa-solid fa-plus"></i> Novo Cartão
+                    </button>
+                </div>
+                <div class="cards-grid" id="cardsList">
+                    <!-- Cards will be rendered here -->
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- Add Transaction Modal -->
+    <div class="modal" id="transactionModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Nova Transação</h3>
+                <span class="close-modal" onclick="window.app.closeModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="transactionForm">
+                    <div class="form-group">
+                        <label for="transDate">Data</label>
+                        <input type="date" id="transDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="transDesc">Descrição</label>
+                        <input type="text" id="transDesc" placeholder="Ex: Salário, Aluguel" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="transCategory">Categoria</label>
+                        <select id="transCategory" required class="category-select">
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="transType">Tipo</label>
+                        <div class="radio-group">
+                            <label class="radio-label income">
+                                <input type="radio" name="transType" value="income" checked> Receita
+                            </label>
+                            <label class="radio-label expense">
+                                <input type="radio" name="transType" value="expense"> Despesa
+                            </label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="transValue">Valor</label>
+                        <input type="number" id="transValue" step="0.01" min="0" placeholder="0,00" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-outline"
+                            onclick="window.app.closeModal()">Cancelar</button>
+                        <button type="submit" class="btn btn-success">Salvar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fixed Expense Modal -->
+    <div class="modal" id="fixedModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Nova Despesa Fixa</h3>
+                <span class="close-modal" onclick="window.app.closeFixedModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="fixedForm">
+                    <div class="form-group">
+                        <label for="fixedDay">Dia de Vencimento</label>
+                        <input type="number" id="fixedDay" min="1" max="31" required placeholder="1-31">
+                    </div>
+                    <div class="form-group">
+                        <label for="fixedDesc">Descrição</label>
+                        <input type="text" id="fixedDesc" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="fixedCategory">Categoria</label>
+                        <select id="fixedCategory" required class="category-select"></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="fixedValue">Valor (Aprox.)</label>
+                        <input type="number" id="fixedValue" step="0.01" min="0" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-outline"
+                            onclick="window.app.closeFixedModal()">Cancelar</button>
+                        <button type="submit" class="btn btn-success">Salvar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Goal Modal -->
+    <div class="modal" id="goalModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Nova Meta</h3>
+                <span class="close-modal" onclick="window.app.closeGoalModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="goalForm">
+                    <div class="form-group">
+                        <label for="goalName">Nome da Meta</label>
+                        <input type="text" id="goalName" placeholder="Ex: Viagem, Carro Novo" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="goalTarget">Valor Alvo (R$)</label>
+                        <input type="number" id="goalTarget" step="0.01" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="goalCurrent">Valor Guardado Atual (R$)</label>
+                        <input type="number" id="goalCurrent" step="0.01" min="0" value="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="goalColor">Cor</label>
+                        <input type="color" id="goalColor" value="#3b82f6" style="width: 100%; height: 40px;">
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-outline"
+                            onclick="window.app.closeGoalModal()">Cancelar</button>
+                        <button type="submit" class="btn btn-success">Salvar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card Modal -->
+    <div class="modal" id="cardModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Novo Cartão</h3>
+                <span class="close-modal" onclick="window.app.closeCardModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="cardForm">
+                    <div class="form-group">
+                        <label for="cardName">Nome do Cartão</label>
+                        <input type="text" id="cardName" placeholder="Ex: Nubank, Visa" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="cardLimit">Limite (R$)</label>
+                        <input type="number" id="cardLimit" step="0.01" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="cardClosingDay">Dia Fechamento</label>
+                        <input type="number" id="cardClosingDay" min="1" max="31" placeholder="1-31" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="cardDueDay">Dia Vencimento</label>
+                        <input type="number" id="cardDueDay" min="1" max="31" placeholder="1-31" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="cardColor">Cor do Cartão</label>
+                        <input type="color" id="cardColor" value="#820ad1" style="width: 100%; height: 40px;">
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-outline"
+                            onclick="window.app.closeCardModal()">Cancelar</button>
+                        <button type="submit" class="btn btn-success">Salvar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card Details Modal -->
+    <div class="modal" id="cardDetailsModal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <div>
+                    <h3 id="detailCardName">Nome do Cartão</h3>
+                    <p style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.25rem;">Fatura Atual</p>
+                </div>
+                <span class="close-modal" onclick="window.app.closeCardDetailsModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="card-summary"
+                    style="background: var(--bg-primary); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span style="font-size: 0.8rem; color: var(--text-secondary); display: block;">Total da
+                            Fatura</span>
+                        <span id="detailCardInvoice"
+                            style="font-size: 1.5rem; font-weight: 700; color: var(--red-color);">R$ 0,00</span>
+                    </div>
+                    <div>
+                        <span style="font-size: 0.8rem; color: var(--text-secondary); display: block;">Limite
+                            Disponível</span>
+                        <span id="detailCardLimit"
+                            style="font-size: 1.1rem; font-weight: 600; color: var(--green-color);">R$ 0,00</span>
+                    </div>
+                </div>
+
+                <div class="table-container" style="max-height: 300px; overflow-y: auto;">
+                    <table class="transactions-table">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Descrição</th>
+                                <th>Valor</th>
+                                <th>Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cardTransactionsBody">
+                            <!-- Card Transactions -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="form-actions" style="justify-content: space-between; margin-top: 1.5rem;">
+                    <button type="button" class="btn btn-outline"
+                        onclick="window.app.deleteCard(window.app.currentCardId); window.app.closeCardDetailsModal();"
+                        style="color: var(--red-color); border-color: var(--red-color);">
+                        <i class="fa-solid fa-trash"></i> Excluir Cartão
+                    </button>
+                    <button type="button" class="btn btn-success"
+                        onclick="window.app.openModal(window.app.currentCardId)">
+                        <i class="fa-solid fa-plus"></i> Nova Compra
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
