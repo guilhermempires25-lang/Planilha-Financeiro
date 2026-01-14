@@ -64,8 +64,24 @@
         <!-- Filters -->
         <section class="filters-section">
             <div class="input-group">
-                <label for="monthYear">Mês/Ano</label>
-                <input type="month" id="monthYear">
+                <label>Data</label>
+                <div class="month-nav">
+                    <button id="btnPrevMonth" class="btn-icon"><i class="fa-solid fa-chevron-left"></i></button>
+                    <span id="monthLabel" style="min-width: 100px; text-align: center;">Janeiro</span>
+                    <button id="btnNextMonth" class="btn-icon"><i class="fa-solid fa-chevron-right"></i></button>
+
+                    <select id="yearSelector" class="year-select"
+                        style="margin-left: 10px; padding: 5px; border-radius: 5px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-color);">
+                        <option value="2024">2024</option>
+                        <option value="2025">2025</option>
+                        <option value="2026" selected>2026</option>
+                        <option value="2027">2027</option>
+                        <option value="2028">2028</option>
+                        <option value="2029">2029</option>
+                        <option value="2030">2030</option>
+                    </select>
+                    <input type="hidden" id="monthYear">
+                </div>
             </div>
             <div class="input-group">
                 <label for="tagFilter">Filtrar por Tag</label>
@@ -196,6 +212,10 @@
                         <i class="fa-solid fa-circle-info"></i> As despesas fixas cadastradas agora aparecem
                         automaticamente no Resumo de todos os meses.
                     </p>
+                    <button class="btn btn-outline" onclick="window.app.generateFixedForMonth()"
+                        style="margin-top: 10px; width: 100%;">
+                        <i class="fa-solid fa-calendar-check"></i> Gerar no Mês Atual
+                    </button>
                 </div>
                 <div class="table-container" style="margin-bottom: 2rem;">
                     <h3 style="margin-bottom: 1rem; color: var(--green-color);"><i class="fa-solid fa-arrow-up"></i>

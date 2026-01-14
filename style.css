@@ -173,9 +173,16 @@ body {
     transition: background-color 0.3s, color 0.3s, border-color 0.3s;
 }
 
-.input-group input:focus {
+.input-group input:focus,
+.input-group select:focus {
     border-color: var(--blue-color);
     box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+/* Fix for Select Options Readability */
+select option {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
 }
 
 /* Dashboard Cards */
@@ -824,4 +831,104 @@ body {
         opacity: 1;
         transform: translateY(0);
     }
+}
+
+/* Invoice Modal Improvements */
+.invoice-row td {
+    padding: 12px 10px;
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
+}
+
+.invoice-row:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+    /* Subtle hover */
+}
+
+/* Dark Mode Hover */
+body.dark-mode .invoice-row:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.delete-btn {
+    background: none;
+    border: none;
+    color: #9ca3af;
+    /* Light Gray */
+    cursor: pointer;
+    font-size: 1.1rem;
+    padding: 8px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.delete-btn:hover {
+    color: var(--red-color);
+    /* Red */
+    background-color: rgba(239, 68, 68, 0.1);
+    transform: scale(1.1);
+}
+
+/* Pending Transaction Styles (Shared Expenses) */
+.pending-row {
+    opacity: 0.6;
+    background-color: rgba(0, 0, 0, 0.01);
+    border-left: 3px solid #e5e7eb;
+}
+
+.pending-row:hover {
+    opacity: 1;
+    /* Focus only on hover */
+    background-color: rgba(0, 0, 0, 0.03);
+    border-left-color: var(--blue-color);
+}
+
+.approve-btn {
+    background: none;
+    border: none;
+    color: #94a3b8;
+    /* Muted */
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-right: 8px;
+}
+
+.approve-btn:hover {
+    color: var(--green-color);
+    transform: scale(1.2);
+    background-color: rgba(34, 197, 94, 0.1);
+    border-radius: 50%;
+}
+
+/* Month Navigation Styles */
+.month-nav {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg-secondary);
+    padding: 8px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+}
+
+.month-nav span {
+    font-weight: 600;
+    min-width: 140px;
+    text-align: center;
+    user-select: none;
+}
+
+.month-nav .btn-icon {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding: 4px;
+    border-radius: 4px;
+}
+
+.month-nav .btn-icon:hover {
+    background: var(--bg-primary);
+    color: var(--text-primary);
 }
