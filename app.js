@@ -1,3 +1,16 @@
+const CATEGORY_ICONS = {
+    'Alimentação': '🍔',
+    'Transporte': '🚗',
+    'Moradia': '🏠',
+    'Lazer': '🎉',
+    'Saúde': '💊',
+    'Educação': '📚',
+    'Investimentos': '📈',
+    'Salário': '💰',
+    'Serviços': '💡',
+    'Outros': '🏷️'
+};
+
 class FinanceApp {
     constructor() {
         this.transactions = JSON.parse(localStorage.getItem('finance_transactions')) || [];
@@ -44,6 +57,7 @@ class FinanceApp {
 
         // Event Listeners
         this.monthYearInput.addEventListener('change', () => this.render());
+        document.getElementById('tagFilter').addEventListener('change', () => this.render());
         this.initialBalanceInput.addEventListener('change', (e) => {
             this.initialBalance = parseFloat(e.target.value) || 0;
             this.saveAll();
@@ -67,10 +81,102 @@ class FinanceApp {
             if (event.target == this.fixedModal) this.closeFixedModal();
             if (event.target == this.goalModal) this.closeGoalModal();
             if (event.target == this.cardModal) this.closeCardModal();
-            if (event.target == this.cardDetailsModal) this.closeCardDetailsModal(); // New
+            if (event.target == this.cardDetailsModal) this.closeCardDetailsModal();
+            if (event.target == document.getElementById('installmentsModal')) this.closeInstallmentsModal();
         };
 
         this.render();
+        this.checkAlerts(); // Initial check
+    }
+
+    toggleNotifications() {
+        const drop = document.getElementById('notifDropdown');
+        drop.style.display = drop.style.display === 'none' ? 'block' : 'none';
+    }
+
+    checkAlerts() {
+        const alerts = [];
+        const today = new Date();
+        const currentMonthStr = this.getCurrentMonthStr();
+
+        // 1. Fixed Expenses Due Soon (next 5 days)
+        this.fixedExpenses.forEach(fix => {
+            // Assume fixed expense for CURRENT month match
+            // Day comparison
+            const dueDay = fix.day;
+            const currentDay = today.getDate();
+            const daysDiff = dueDay - currentDay;
+
+            if (daysDiff >= 0 && daysDiff <= 5) {
+                alerts.push({ msg: `Conta "${fix.description}" vence em ${daysDiff === 0 ? 'hoje' : daysDiff + ' dias'}!`, type: 'warning' });
+            }
+        });
+
+        // 2. High Spending (80% of Income)
+        const filtered = this.getFilteredTransactions();
+        const income = filtered.filter(t => t.type === 'income').reduce((a, b) => a + b.value, 0);
+        const expense = filtered.filter(t => t.type === 'expense').reduce((a, b) => a + b.value, 0);
+
+        if (income > 0 && expense > (income * 0.8)) {
+            alerts.push({ msg: `Cuidado! Você já gastou ${Math.round((expense / income) * 100)}% da sua renda este mês.`, type: 'danger' });
+        }
+
+        // 3. Savings Goal logic (Phase 2 - will impl later, placeholder)
+        // const savings = income - expense;
+        // if (savings > 0) alerts.push({ msg: `Você economizou R$ ${savings.toFixed(2)} este mês!`, type: 'success' });
+
+        this.updateNotifications(alerts);
+    }
+
+    // --- Toast & Icon Helpers ---
+    showToast(message, type = 'success') {
+        let container = document.getElementById('toastContainer');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toastContainer';
+            container.className = 'toast-container';
+            document.body.appendChild(container);
+        }
+
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+
+        let icon = 'fa-check-circle';
+        if (type === 'error') icon = 'fa-times-circle';
+        if (type === 'warning') icon = 'fa-exclamation-triangle';
+        if (type === 'info') icon = 'fa-info-circle';
+
+        toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${message}</span>`;
+
+        container.appendChild(toast);
+
+        // Remove after 3s
+        setTimeout(() => {
+            toast.style.animation = 'fadeOut 0.3s ease-in forwards';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    getCategoryWithIcon(name) {
+        return `${CATEGORY_ICONS[name] || '🏷️'} ${name}`;
+    }
+
+    updateNotifications(alerts) {
+        const badge = document.getElementById('notifBadge');
+        const list = document.getElementById('notifList');
+
+        badge.textContent = alerts.length;
+        badge.style.display = alerts.length > 0 ? 'flex' : 'none';
+
+        if (alerts.length === 0) {
+            list.innerHTML = '<p style="color: var(--text-secondary);">Sem novas notificações.</p>';
+        } else {
+            list.innerHTML = alerts.map(a => `
+                <div style="padding: 8px; border-bottom: 1px solid var(--border-color); color: ${a.type === 'danger' ? '#ef4444' : a.type === 'warning' ? '#f59e0b' : '#22c55e'}">
+                    <i class="fa-solid fa-circle-exclamation"></i> ${a.msg}
+                </div>
+            `).join('');
+        }
     }
 
     initTheme() {
@@ -138,13 +244,76 @@ class FinanceApp {
             this.transactions = this.transactions.filter(t => t.id !== id);
             this.saveAll();
             this.render();
+
+            // Refresh card details if open
+            if (this.currentCardId && this.cardDetailsModal.classList.contains('active')) {
+                this.renderCardDetails();
+            }
         }
     }
 
     getFilteredTransactions() {
         const selectedMonth = this.monthYearInput.value;
-        // Exclude card transactions from the main list
-        return this.transactions.filter(t => t.date.startsWith(selectedMonth) && !t.cardId);
+        const tag = document.getElementById('tagFilter').value?.toLowerCase();
+
+        // 1. Get real transactions
+        let filtered = this.transactions.filter(t => t.date.startsWith(selectedMonth) && !t.cardId);
+
+        // 2. Inject Virtual Fixed Expenses
+        // Only inject if it doesn't already exist (duplicate check by desc + val + day)
+        const [yStr, mStr] = selectedMonth.split('-');
+
+        this.fixedExpenses.forEach(fix => {
+            // Fix day handling (if day 31 doesn't exist in month?) -> JS handles overflow, but let's be safe later.
+            // For now simple string concat.
+            const targetDate = `${selectedMonth}-${String(fix.day).padStart(2, '0')}`;
+
+            // Correct type handling
+            const isExpense = (fix.type !== 'income');
+
+            // Duplicate check
+            const exists = filtered.find(t =>
+                t.description === fix.description &&
+                Math.abs(t.value - fix.value) < 0.01 &&
+                t.date === targetDate
+            );
+
+            if (!exists) {
+                filtered.push({
+                    id: `virtual-${fix.id}`,
+                    date: targetDate, // YYYY-MM-DD
+                    description: fix.description,
+                    category: fix.category,
+                    type: isExpense ? 'expense' : 'income', // NEW
+                    value: fix.value,
+                    isVirtual: true
+                });
+            }
+        });
+
+        if (tag) {
+            filtered = filtered.filter(t => t.tags && t.tags.includes(tag));
+        }
+
+        return filtered;
+    }
+
+    updateTagOptions() {
+        // Collect all unique tags
+        const allTags = new Set();
+        this.transactions.forEach(t => {
+            if (t.tags) t.tags.forEach(tag => allTags.add(tag));
+        });
+
+        const select = document.getElementById('tagFilter');
+        const current = select.value;
+
+        let html = '<option value="">Todas as Tags</option>';
+        allTags.forEach(tag => {
+            html += `<option value="${tag}">${tag}</option>`;
+        });
+        select.innerHTML = html;
+        select.value = current;
     }
 
     // --- Render Logic ---
@@ -159,7 +328,11 @@ class FinanceApp {
     }
 
     render() {
+        this.updateTagOptions(); // Update tags list
         const filtered = this.getFilteredTransactions();
+
+        this.checkAlerts(); // Re-check alerts on render
+
 
         // Month Calculations
         const income = filtered.filter(t => t.type === 'income').reduce((acc, t) => acc + t.value, 0);
@@ -172,11 +345,17 @@ class FinanceApp {
         const globalExpense = globalTransactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.value, 0);
         const globalFinalBalance = this.initialBalance + globalIncome - globalExpense;
 
+        // NEW: Adjust Final Balance by subtracting Virtual Fixed Expenses AND adding Virtual Fixed Income
+        const currentVirtualExpense = filtered.filter(t => t.isVirtual && t.type === 'expense').reduce((acc, t) => acc + t.value, 0);
+        const currentVirtualIncome = filtered.filter(t => t.isVirtual && t.type === 'income').reduce((acc, t) => acc + t.value, 0);
+
+        const projectedFinalBalance = globalFinalBalance - currentVirtualExpense + currentVirtualIncome;
+
         // Update Cards
         document.getElementById('incomeDisplay').textContent = this.formatCurrency(income);
         document.getElementById('expenseDisplay').textContent = this.formatCurrency(expense);
         document.getElementById('monthlyBalanceDisplay').textContent = this.formatCurrency(monthlyBalance);
-        document.getElementById('finalBalanceDisplay').textContent = this.formatCurrency(globalFinalBalance);
+        document.getElementById('finalBalanceDisplay').textContent = this.formatCurrency(projectedFinalBalance);
 
         // Update Table
         const tbody = document.getElementById('transactionsBody');
@@ -191,13 +370,19 @@ class FinanceApp {
             tr.innerHTML = `
                 <td>${this.formatDate(t.date)}</td>
                 <td>${t.description}</td>
-                <td><span style="background: var(--bg-primary); padding: 2px 8px; border-radius: 12px; font-size: 0.85em; border: 1px solid var(--border-color);">${t.category}</span></td>
+                <td><span style="background: var(--bg-primary); padding: 2px 8px; border-radius: 12px; font-size: 0.85em; border: 1px solid var(--border-color);">${this.getCategoryWithIcon(t.category)}</span></td>
                 <td>${t.type === 'income' ? 'Receita' : 'Despesa'}</td>
                 <td class="${colorClass}">${valuePrefix}${this.formatCurrency(t.value).replace('R$', '').trim()}</td>
                 <td>
-                    <button class="btn-icon" onclick="window.app.deleteTransaction('${t.id}')">
-                        <i class="fa-solid fa-trash"></i>
-                    </button>
+                    ${t.isVirtual ?
+                    `<button class="btn-icon" onclick="alert('Esta é uma despesa fixa automática. Para removê-la, vá até a aba Despesas Fixas.')" style="opacity: 0.5;">
+                            <i class="fa-solid fa-lock"></i>
+                        </button>`
+                    :
+                    `<button class="btn-icon" onclick="window.app.deleteTransaction('${t.id}')">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>`
+                }
                 </td>
             `;
             tbody.appendChild(tr);
@@ -222,7 +407,7 @@ class FinanceApp {
         const list = document.getElementById('categoriesList');
         list.innerHTML = this.categories.map(c => `
             <div class="category-tag">
-                <span>${c}</span>
+                <span>${this.getCategoryWithIcon(c)}</span>
                 <button class="btn-icon" onclick="window.app.deleteCategory('${c}')">
                     <i class="fa-solid fa-times"></i>
                 </button>
@@ -242,7 +427,7 @@ class FinanceApp {
     }
 
     deleteCategory(name) {
-        if (confirm(`Excluir categoria "${name}"?`)) {
+        if (confirm(`Excluir categoria "${name}" ? `)) {
             this.categories = this.categories.filter(c => c !== name);
             this.saveAll();
             this.renderCategories();
@@ -259,22 +444,56 @@ class FinanceApp {
 
     handleFixedSubmit(e) {
         e.preventDefault();
+        const day = parseInt(document.getElementById('fixedDay').value);
+        const desc = document.getElementById('fixedDesc').value;
+        const cat = document.getElementById('fixedCategory').value;
+        const val = parseFloat(document.getElementById('fixedValue').value);
+        // NEW: Capture Type
+        const type = document.querySelector('input[name="fixedType"]:checked').value;
+
         const expense = {
             id: Date.now().toString(),
-            day: document.getElementById('fixedDay').value,
-            description: document.getElementById('fixedDesc').value,
-            category: document.getElementById('fixedCategory').value,
-            value: parseFloat(document.getElementById('fixedValue').value)
+            day: day,
+            description: desc,
+            category: cat,
+            value: val,
+            type: type // Persist type
         };
         this.fixedExpenses.push(expense);
+
+
         this.saveAll();
         this.closeFixedModal();
         this.renderFixedExpenses();
+        this.render(); // Update transactions list
+        this.showToast('Despesa fixa salva!', 'success');
     }
 
     renderFixedExpenses() {
-        const tbody = document.getElementById('fixedExpensesBody');
-        tbody.innerHTML = this.fixedExpenses.sort((a, b) => a.day - b.day).map(e => `
+        const incomeBody = document.getElementById('fixedIncomeBody');
+        const expenseBody = document.getElementById('fixedExpensesBody');
+
+        // Render Incomes
+        incomeBody.innerHTML = this.fixedExpenses.filter(e => e.type === 'income').sort((a, b) => a.day - b.day).map(e => `
+            <tr>
+                <td>Dia ${e.day}</td>
+                <td>${e.description}</td>
+                <td>${e.category}</td>
+                <td class="text-green">R$ ${e.value.toFixed(2)}</td>
+                <td>
+                    <button class="btn-icon" onclick="window.app.deleteFixedExpense('${e.id}')">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+
+        if (this.fixedExpenses.filter(e => e.type === 'income').length === 0) {
+            incomeBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: var(--text-secondary);">Nenhuma receita fixa cadastrada.</td></tr>';
+        }
+
+        // Render Expenses (Default or explicit type expense)
+        expenseBody.innerHTML = this.fixedExpenses.filter(e => e.type !== 'income').sort((a, b) => a.day - b.day).map(e => `
             <tr>
                 <td>Dia ${e.day}</td>
                 <td>${e.description}</td>
@@ -287,34 +506,60 @@ class FinanceApp {
                 </td>
             </tr>
         `).join('');
+        if (this.fixedExpenses.filter(e => e.type !== 'income').length === 0) {
+            expenseBody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: var(--text-secondary);">Nenhuma despesa fixa cadastrada.</td></tr>';
+        }
     }
 
     deleteFixedExpense(id) {
         this.fixedExpenses = this.fixedExpenses.filter(e => e.id !== id);
         this.saveAll();
         this.renderFixedExpenses();
+        this.showToast('Despesa fixa removida.');
     }
 
     generateFixedExpenses() {
-        const currentMonth = this.monthYearInput.value; // YYYY-MM
+        const today = new Date();
+        const y = today.getFullYear();
+        const m = String(today.getMonth() + 1).padStart(2, '0');
+        const lockKey = `fixed_generated_${y}_${m}`;
+
+        if (localStorage.getItem(lockKey)) {
+            this.showToast('As despesas fixas deste mês já foram geradas!', 'warning');
+            return;
+        }
+
         let count = 0;
-
         this.fixedExpenses.forEach(fix => {
-            const dateStr = `${currentMonth}-${String(fix.day).padStart(2, '0')}`;
+            // Check if already exists in this month (double safety)
+            const exists = this.transactions.find(t =>
+                t.description === fix.description &&
+                t.value === fix.value &&
+                t.date.startsWith(`${y}-${m}`)
+            );
 
-            // Check if already exists roughly (optional check, skip for now to allow duplicates if needed)
-            this.addTransaction({
-                date: dateStr,
-                description: fix.description,
-                category: fix.category,
-                type: 'expense',
-                value: fix.value
-            });
-            count++;
+            if (!exists) {
+                this.transactions.push({
+                    id: Date.now().toString() + Math.random(),
+                    date: `${y}-${m}-${String(fix.day).padStart(2, '0')}`,
+                    description: fix.description,
+                    category: fix.category,
+                    type: 'expense',
+                    value: fix.value
+                });
+                count++;
+            }
         });
 
-        alert(`${count} despesas geradas para ${currentMonth}!`);
-        this.switchTab(document.querySelector('[data-tab="resume"]'));
+        if (count > 0) {
+            this.saveAll();
+            this.render();
+            localStorage.setItem(lockKey, 'true');
+            this.showToast(`${count} despesas fixas geradas para este mês!`, 'success');
+            this.switchTab(document.querySelector('[data-tab="resume"]'));
+        } else {
+            this.showToast('Nenhuma despesa fixa nova para gerar.', 'info');
+        }
     }
 
     // --- Goals Logic ---
@@ -384,17 +629,23 @@ class FinanceApp {
     editGoal(id) {
         // Find goal and repopulate modal? Or just delete/re-add?
         // Let's simple delete/re-add logic for MVP or just alert user.
-        alert('Para editar, exclua e crie novamente por enquanto.');
+        this.showToast('Para editar, exclua e crie novamente por enquanto.', 'info');
     }
 
     // --- Cards Logic (NEW) ---
 
-    openCardModal() { this.cardModal.classList.add('active'); }
-    closeCardModal() { this.cardModal.classList.remove('active'); this.cardForm.reset(); }
+    openCardModal() {
+        this.cardModal.classList.add('active');
+    }
+    closeCardModal() {
+        this.cardModal.classList.remove('active');
+        this.cardForm.reset();
+        document.getElementById('cardId').value = ''; // Clear ID for new add
+    }
 
     handleCardSubmit(e) {
         e.preventDefault();
-        const card = {
+        const cardData = {
             id: Date.now().toString(),
             name: document.getElementById('cardName').value,
             limit: parseFloat(document.getElementById('cardLimit').value),
@@ -402,7 +653,20 @@ class FinanceApp {
             dueDay: document.getElementById('cardDueDay').value,
             color: document.getElementById('cardColor').value
         };
-        this.cards.push(card);
+
+        if (document.getElementById('cardId').value) {
+            // Edit
+            const id = document.getElementById('cardId').value;
+            const idx = this.cards.findIndex(c => c.id === id);
+            cardData.id = id; // Preserve ID
+            if (idx >= 0) this.cards[idx] = cardData;
+            this.showToast('Cartão atualizado com sucesso!');
+        } else {
+            // New
+            this.cards.push(cardData);
+            this.showToast('Cartão criado com sucesso!');
+        }
+
         this.saveAll();
         this.closeCardModal();
         this.renderCards();
@@ -443,6 +707,121 @@ class FinanceApp {
         }
     }
 
+    //Helper to determine invoice range based on reference month (due date month)
+    getInvoiceDates(year, month, closingDay, dueDay) {
+        // month is 0-indexed here if coming from Date, but let's assume 1-indexed integers or handle string parsing? 
+        // Input: year (number), month (number 0-11, derived from input value)
+
+        const dueDate = new Date(year, month, dueDay);
+
+        let closingDate = new Date(year, month, closingDay);
+        // If closing date is after due date, it must be from the previous month relative to the due date
+        // E.g. Due 5th, Closing 25th. If we are in May, Due May 5. Closing May 25 is AFTER. So correct closing was Apr 25.
+        if (closingDate >= dueDate) {
+            closingDate.setMonth(closingDate.getMonth() - 1);
+        }
+
+        // Start date is 1 month before closing date + 1 day
+        const startDate = new Date(closingDate);
+        startDate.setMonth(startDate.getMonth() - 1);
+        startDate.setDate(startDate.getDate() + 1);
+
+        // Reset hours to ensure comparison is clean
+        startDate.setHours(0, 0, 0, 0);
+        closingDate.setHours(23, 59, 59, 999);
+
+        return { start: startDate, end: closingDate, due: dueDate };
+    }
+
+    // --- Installments Management Logic ---
+    openInstallmentsModal() {
+        document.getElementById('installmentsModal').classList.add('active');
+        this.renderInstallmentsHelper();
+    }
+    closeInstallmentsModal() { document.getElementById('installmentsModal').classList.remove('active'); }
+
+    renderInstallmentsHelper() {
+        const groups = {};
+
+        // Group by installmentGroupId
+        this.transactions.forEach(t => {
+            if (t.installmentGroupId) {
+                if (!groups[t.installmentGroupId]) {
+                    groups[t.installmentGroupId] = {
+                        description: t.description.replace(/\s\(\d+\/\d+\)$/, ''), // Remove (1/3) suffix
+                        totalValue: 0,
+                        paidValue: 0,
+                        totalCount: t.installmentTotal || 0,
+                        paidCount: 0,
+                        cardId: t.cardId,
+                        transactions: []
+                    };
+                }
+                groups[t.installmentGroupId].transactions.push(t);
+                groups[t.installmentGroupId].totalValue += t.value;
+
+                // Determine if paid: based on if date < today? Or if it appeared in a paid invoice? 
+                // Simple logic: If date <= today, it's "processed/paid" (or at least posted). 
+                // Better: If we have a status, use it. Taking date <= current date (approx for now).
+                // Determine if paid: Use explicit 'paid' flag set by invoice payment
+                if (t.paid) {
+                    groups[t.installmentGroupId].paidValue += t.value;
+                    groups[t.installmentGroupId].paidCount++;
+                } else if (new Date(t.date) <= new Date() && !t.cardId) {
+                    // Fallback for non-card installments or old logic, but strictly speaking card installments depend on invoice payment
+                }
+            }
+        });
+
+        const tbody = document.getElementById('installmentsBody');
+        tbody.innerHTML = Object.values(groups).map(g => {
+            const cardName = this.cards.find(c => c.id === g.cardId)?.name || 'N/A';
+            const remaining = g.totalValue - g.paidValue;
+            const progress = (g.paidCount / g.totalCount) * 100;
+            const groupId = g.transactions[0].installmentGroupId;
+
+            return `
+                <tr>
+                    <td>${g.description}</td>
+                    <td>${cardName}</td>
+                    <td>${this.formatCurrency(g.totalValue)}</td>
+                    <td>
+                        <div style="font-size: 0.8rem; margin-bottom: 2px;">${g.paidCount}/${g.totalCount}</div>
+                        <div style="width: 100%; height: 6px; background: var(--bg-secondary); border-radius: 3px;">
+                            <div style="width: ${progress}%; height: 100%; background: var(--green-color); border-radius: 3px;"></div>
+                        </div>
+                    </td>
+                    <td>${this.formatCurrency(remaining)}</td>
+                    <td>
+                         <button class="btn-icon" onclick="window.app.deleteInstallmentGroup('${groupId}')" title="Excluir Parcelamento">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        if (Object.keys(groups).length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 2rem;">Nenhum parcelamento encontrado.</td></tr>';
+        }
+    }
+
+    deleteInstallmentGroup(groupId) {
+        if (confirm('Atenção: Isso excluirá TODAS as parcelas deste lançamento, inclusive as já pagas. Deseja continuar?')) {
+            const initialCount = this.transactions.length;
+            this.transactions = this.transactions.filter(t => t.installmentGroupId !== groupId);
+
+            if (this.transactions.length < initialCount) {
+                this.saveAll();
+                this.render(); // Update main view if needed
+                this.renderInstallmentsHelper(); // Refresh modal
+                this.showToast('Parcelamento excluído com sucesso.');
+            } else {
+                this.showToast('Erro ao excluir parcelamento.', 'error');
+            }
+        }
+    }
+
     // --- Card Details Logic ---
     openCardDetails(cardId) {
         this.currentCardId = cardId;
@@ -466,17 +845,42 @@ class FinanceApp {
         if (!this.currentCardId) return;
 
         const card = this.cards.find(c => c.id === this.currentCardId);
-        // Filter transactions linked to this card and current month (or all unpaid? simplifying to all linked)
-        // Ideally should filter by month if showing invoice. Let's show ALL linked for now or filter by selected global month.
-        // Let's filter by selected global month to match context.
-        const month = this.monthYearInput.value;
-        const cardTrans = this.transactions.filter(t => t.cardId === this.currentCardId && t.date.startsWith(month));
+
+        // Parse selected global month as the Reference Month (Due Date Month)
+        const [yStr, mStr] = this.monthYearInput.value.split('-');
+        const year = parseInt(yStr);
+        const month = parseInt(mStr) - 1; // 0-indexed
+
+        const { start, end, due } = this.getInvoiceDates(year, month, parseInt(card.closingDay), parseInt(card.dueDay));
+
+        // Filter transactions within range
+        const cardTrans = this.transactions.filter(t => {
+            if (t.cardId !== this.currentCardId) return false;
+            const tDate = new Date(t.date + 'T00:00:00'); // appended time to force local zone processing or avoid UTC issues if string is YYYY-MM-DD
+            // Actually YYYY-MM-DD string construction usually sets UTC.
+            // Let's ensure comparable types.
+            // Simplest: String comparison if ISO? No, ranges cross months.
+            // Let's use Date objects.
+            const tDateObj = new Date(t.date);
+            // Fix timezone offset issue: t.date is YYYY-MM-DD. new Date('2024-05-01') is UTC. 
+            // We want local calendar date comparisons.
+            // Hack: Append split parts to create date in local time
+            const [ty, tm, td] = t.date.split('-').map(Number);
+            const tLocal = new Date(ty, tm - 1, td);
+
+            return tLocal >= start && tLocal <= end;
+        });
 
         const totalInvoice = cardTrans.reduce((acc, t) => acc + t.value, 0);
-        const availableLimit = card.limit - totalInvoice;
+        const availableLimit = card.limit - totalInvoice; // Note: This is simplified. Real limit subtracts ALL unpaid, not just this month. But for MVP this is OK.
 
         document.getElementById('detailCardInvoice').textContent = this.formatCurrency(totalInvoice);
         document.getElementById('detailCardLimit').textContent = this.formatCurrency(availableLimit);
+
+        // Show Period in UI
+        const dateOpt = { day: '2-digit', month: '2-digit' };
+        const periodStr = `${start.toLocaleDateString('pt-BR', dateOpt)} a ${end.toLocaleDateString('pt-BR', dateOpt)} `;
+        document.getElementById('detailCardPeriod').textContent = periodStr; // Needs HTML element
 
         const tbody = document.getElementById('cardTransactionsBody');
         tbody.innerHTML = cardTrans.map(t => `
@@ -493,9 +897,60 @@ class FinanceApp {
         `).join('');
     }
 
+    payInvoice() {
+        if (!this.currentCardId) return;
+        const card = this.cards.find(c => c.id === this.currentCardId);
+
+        // Calculate amount again or grab from DOM text? Safer to calculate.
+        const [yStr, mStr] = this.monthYearInput.value.split('-');
+        const year = parseInt(yStr);
+        const month = parseInt(mStr) - 1;
+        const { start, end, due } = this.getInvoiceDates(year, month, parseInt(card.closingDay), parseInt(card.dueDay));
+
+        const cardTrans = this.transactions.filter(t => {
+            if (t.cardId !== this.currentCardId) return false;
+            const [ty, tm, td] = t.date.split('-').map(Number);
+            const tLocal = new Date(ty, tm - 1, td);
+            return tLocal >= start && tLocal <= end;
+        });
+
+        const total = cardTrans.reduce((acc, t) => acc + t.value, 0);
+
+        if (total <= 0) {
+            this.showToast('Fatura zerada ou negativa, nada a pagar.', 'info');
+            return;
+        }
+
+        if (confirm(`Confirmar pagamento da fatura de ${this.formatCurrency(total)}?`)) {
+            // Add expense to main account
+            this.addTransaction({
+                date: new Date().toISOString().split('T')[0], // Paid today
+                description: `Fatura ${card.name} (${mStr}/${yStr})`,
+                category: 'Cartão de Crédito',
+                type: 'expense',
+                value: total,
+                cardId: null // Explicitly null so it affects main balance
+            });
+
+            // NEW: Mark card transactions as paid to update Installment Progress
+            // Safe update by ID
+            cardTrans.forEach(ct => {
+                const realT = this.transactions.find(t => t.id === ct.id);
+                if (realT) realT.paid = true;
+            });
+
+            this.showToast('Pagamento registrado!');
+            this.saveAll(); // Save the 'paid' status updates
+            this.render(); // Ensure UI reflects changes (though card details modal closes)
+            this.closeCardDetailsModal();
+        }
+    }
+
     // --- Projection Logic (Chart.js) ---
 
     renderProjection() {
+        this.renderCategoryChart(); // Render Category Chart alongside projection
+
         const ctx = document.getElementById('projectionChart');
         if (!ctx) return;
 
@@ -507,11 +962,11 @@ class FinanceApp {
         const today = new Date();
         for (let i = 5; i >= 0; i--) {
             const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-            const mStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            const mStr = `${d.getFullYear()} -${String(d.getMonth() + 1).padStart(2, '0')} `;
             labels.push(d.toLocaleDateString('pt-BR', { month: 'short' }));
 
             // Filter
-            const monthTrans = this.transactions.filter(t => t.date.startsWith(mStr));
+            const monthTrans = this.transactions.filter(t => t.date.startsWith(mStr) && !t.cardId); // Exclude card items from cash flow chart roughly
             incomeData.push(monthTrans.filter(t => t.type === 'income').reduce((a, b) => a + b.value, 0));
             expenseData.push(monthTrans.filter(t => t.type === 'expense').reduce((a, b) => a + b.value, 0));
         }
@@ -542,12 +997,115 @@ class FinanceApp {
                 }
             }
         });
+
+        // Forecast Logic
+        // Avg of last 3 months expenses
+        const last3Expenses = expenseData.slice(-3); // Get last 3
+        const avgExpense = last3Expenses.reduce((a, b) => a + b, 0) / (last3Expenses.length || 1);
+
+        const forecastEl = document.getElementById('forecastDisplay');
+        if (forecastEl) {
+            forecastEl.innerHTML = `
+                <div style="margin-top: 1rem; padding: 1rem; background: var(--bg-secondary); border-radius: var(--radius-md); text-align: center;">
+                    <h4 style="margin-bottom: 0.5rem; color: var(--text-primary);">Previsão para Próximo Mês</h4>
+                    <p style="font-size: 1.2rem; color: var(--text-secondary);">
+                        Baseado na média dos últimos 3 meses, você gastará aproximadamente 
+                        <strong style="color: var(--red-color);">${this.formatCurrency(avgExpense)}</strong>.
+                    </p>
+                </div>
+            `;
+        }
+    }
+
+    renderCategoryChart() {
+        const ctx = document.getElementById('categoryChart');
+        if (!ctx) return;
+
+        // Get Current Month Transactions
+        const filtered = this.getFilteredTransactions();
+
+        // Group Expenses by Category
+        const expenses = filtered.filter(t => t.type === 'expense');
+        const catTotals = {};
+
+        expenses.forEach(t => {
+            if (!catTotals[t.category]) catTotals[t.category] = 0;
+            catTotals[t.category] += t.value;
+        });
+
+        const labels = Object.keys(catTotals);
+        const data = Object.values(catTotals);
+
+        // Colors
+        const backgroundColors = [
+            '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981',
+            '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#d946ef', '#f43f5e'
+        ];
+
+        if (this.catChartInstance) this.catChartInstance.destroy();
+
+        const isDark = document.body.classList.contains('dark-mode');
+        const textColor = isDark ? '#d1d5db' : '#374151';
+
+        this.catChartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: backgroundColors,
+                    borderWidth: 1,
+                    borderColor: isDark ? '#1f2937' : '#ffffff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: { color: textColor }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function (context) {
+                                let label = context.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed !== null) {
+                                    label += new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed);
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
     }
 
     updateChartTheme() {
         if (this.chartInstance && document.getElementById('tab-projection').classList.contains('active')) {
             this.renderProjection();
         }
+    }
+
+    // --- Savings Goal Logic ---
+    // Minimal implementation for now: Store in Generic Settings (localStorage)
+    setSavingsGoal() {
+        const current = localStorage.getItem('finance_savings_goal') || '20';
+        const val = prompt('Defina sua meta de economia (% da renda):', current);
+        if (val !== null) {
+            localStorage.setItem('finance_savings_goal', val);
+            this.render(); // Re-render to update alerts/dashboard
+        }
+    }
+
+    renderSavingsWidget() {
+        // Find place to insert? Or just use alerts?
+        // Let's add a small widget in Dashboard Cards section dynamically if needed?
+        // Or better, just inside the 'Resumo' tab header.
     }
 
     // --- Common Handlers ---
@@ -590,24 +1148,300 @@ class FinanceApp {
         // Use the persisted this.currentCardId
         // We do NOT check for DOM visibility here because we may have hidden the card modal to show the transaction modal
 
-        const formData = {
-            date: document.getElementById('transDate').value,
-            description: document.getElementById('transDesc').value,
-            category: document.getElementById('transCategory').value,
-            type: document.querySelector('input[name="transType"]:checked').value,
-            value: parseFloat(document.getElementById('transValue').value),
-            cardId: this.currentCardId
-        };
-        this.addTransaction(formData);
+        const rawDate = document.getElementById('transDate').value;
+        const description = document.getElementById('transDesc').value;
+        const category = document.getElementById('transCategory').value;
+        const type = document.querySelector('input[name="transType"]:checked').value;
+        const totalValue = parseFloat(document.getElementById('transValue').value);
+        const installments = parseInt(document.getElementById('transInstallments').value) || 1;
+
+        // Tags handling
+        const rawTags = document.getElementById('transTags').value;
+        const tags = rawTags ? rawTags.split(',').map(t => t.trim().toLowerCase()).filter(t => t) : [];
+
+        let addedInCurrentView = false;
+        // Logic to check if (at least the first) transaction appears in the current card view
+        // Only checking first installment for simplicity of notification
+        let firstTransDate = null;
+
+        const groupId = Date.now().toString(); // ID for grouping installments
+
+        if (installments > 1) {
+            const valuePerInstallment = totalValue / installments;
+            for (let i = 0; i < installments; i++) {
+                const dateObj = new Date(rawDate + 'T12:00:00');
+                dateObj.setMonth(dateObj.getMonth() + i);
+
+                const y = dateObj.getFullYear();
+                const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+                const d = String(dateObj.getDate()).padStart(2, '0');
+                const dateStr = `${y} -${m} -${d} `;
+
+                if (i === 0) firstTransDate = { y: y, m: dateObj.getMonth() }; // used for checking
+
+                this.transactions.push({
+                    id: Date.now().toString() + Math.random(),
+                    date: dateStr,
+                    description: `${description} (${i + 1}/${installments})`,
+                    category: category,
+                    type: type,
+                    value: valuePerInstallment,
+                    cardId: this.currentCardId,
+                    tags: tags,
+                    installmentGroupId: groupId,
+                    installmentIndex: i + 1,
+                    installmentTotal: installments
+                });
+            }
+            this.saveAll();
+            this.render();
+        } else {
+            const formData = {
+                date: rawDate,
+                description: description,
+                category: category,
+                type: type,
+                value: totalValue,
+                cardId: this.currentCardId,
+                tags: tags
+            };
+            // Manually add to avoid double render call structure conflict (though addTransaction is fine)
+            // But we want to capture the date for checking
+            this.addTransaction(formData);
+            const d = new Date(rawDate + 'T12:00:00');
+            firstTransDate = { y: d.getFullYear(), m: d.getMonth() };
+        }
 
         this.closeModal();
 
-        // Logic to restore the card details modal if we were in that context
-        if (this.currentCardId) {
-            this.openCardDetails(this.currentCardId);
+        // Check if the transaction is visible in the CURRENT card invoice view
+        if (this.currentCardId && firstTransDate) {
+            this.openCardDetails(this.currentCardId); // Re-open logic handles the filtering
+
+            // Check based on current filter
+            // Note: openCardDetails -> renderCardDetails calculates the range
+            // We can re-calculate range here to compare
+            const [yStr, mStr] = this.monthYearInput.value.split('-');
+            const year = parseInt(yStr);
+            const month = parseInt(mStr) - 1;
+            const card = this.cards.find(c => c.id === this.currentCardId);
+
+            const { start, end } = this.getInvoiceDates(year, month, parseInt(card.closingDay), parseInt(card.dueDay));
+
+            // Use rawDate which was captured BEFORE closeModal()
+            const noteDate = new Date(rawDate + 'T12:00:00');
+
+            // Fix timezone for comparison
+            const tLocal = new Date(noteDate.getFullYear(), noteDate.getMonth(), noteDate.getDate());
+
+            if (tLocal < start || tLocal > end) {
+                this.showToast(`Transação salva! Porém, ela cairá na fatura seguinte e não aparece na visualização atual.`, 'warning');
+            }
         } else {
             this.currentCardId = null;
         }
+    }
+
+
+    // --- CSV Import Features ---
+    handleCSVImport(input) {
+        const file = input.files[0];
+        if (!file) return;
+
+        if (!this.currentCardId) {
+            this.showToast('Erro: Nenhum cartão selecionado.', 'error');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const text = e.target.result;
+            this.parseCSV(text);
+        };
+        reader.readAsText(file);
+
+        // Reset input so same file can be selected again if needed
+        input.value = '';
+    }
+
+    parseCSV(text) {
+        const lines = text.split('\n');
+        let transactionsAdded = 0;
+
+        // --- Header Detection ---
+        if (lines.length < 2) {
+            this.showToast('Arquivo CSV vazio ou inválido.', 'error');
+            return;
+        }
+
+        // Potential column synonyms
+        const colMap = {
+            date: ['data', 'date', 'dt', 'd', 'lancamento', 'lançamento'],
+            desc: ['descricao', 'descrição', 'desc', 'description', 'title', 'historico', 'histórico', 'memo', 'estabelecimento', 'loja'],
+            val: ['valor', 'value', 'amount', 'val', 'mn', 'total', 'quantia']
+        };
+
+        // Find header line: The first line that contains at least one keyword from EACH group? 
+        // Or just leniently the first line with ANY date/val keywords?
+        // Let's iterate lines until we find a match for at least 2 categories (e.g. Date and Value)
+        let headerIndex = -1;
+        let idxDate = -1, idxDesc = -1, idxVal = -1;
+
+        for (let i = 0; i < Math.min(lines.length, 10); i++) { // Check first 10 lines max
+            const l = lines[i].toLowerCase();
+            const cols = l.split(',').map(c => c.trim());
+
+            // Check matches
+            const d = cols.findIndex(c => colMap.date.some(k => c.includes(k)));
+            const de = cols.findIndex(c => colMap.desc.some(k => c.includes(k)));
+            const v = cols.findIndex(c => colMap.val.some(k => c.includes(k)));
+
+            if (d !== -1 && v !== -1) { // If we found at least Date and Value, it's likely the header
+                headerIndex = i;
+                idxDate = d;
+                idxDesc = de; // Might be -1 if not found, logic below handles fallback
+                idxVal = v;
+                break;
+            }
+        }
+
+        if (headerIndex === -1) {
+            this.showToast('Cabeçalho não identificado. Verifique se há colunas de Data e Valor.', 'warning');
+            return;
+        }
+
+        // Fallback for Description if not found in header
+        // If csv has 3 cols and we matched Date and Value, take the remaining one as Description?
+        if (idxDesc === -1) {
+            // Find a column that isn't Date or Val
+            const l = lines[headerIndex].toLowerCase();
+            const cols = l.split(',').map(c => c.trim());
+            for (let k = 0; k < cols.length; k++) {
+                if (k !== idxDate && k !== idxVal) {
+                    idxDesc = k;
+                    break;
+                }
+            }
+        }
+
+        // --- Row Parsing ---
+        for (let i = headerIndex + 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+
+            // Regex to ignore commas inside quotes (simple version)
+            // const cols = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); 
+            // Stick to simple split for now unless user complains about comma in description
+            const cols = line.split(',');
+
+            if (cols.length < 2) continue; // Need at least date and val
+
+            let rawDate = cols[idxDate] || '';
+            let rawDesc = (idxDesc !== -1 ? cols[idxDesc] : 'Sem descrição') || 'Sem descrição';
+            let rawVal = cols[idxVal] || '0';
+
+            // --- Cleaning Data ---
+
+            // Date Normalization
+            // Supported: YYYY-MM-DD or DD/MM/YYYY
+            let dateFinal = '';
+            rawDate = rawDate.replace(/"/g, '').trim();
+
+            // Logic requested by User: 
+            // 1. Force split by "/" or "-"
+            // 2. Index 0 = Day, Index 1 = Month, Index 2 = Year
+            // 3. Construct ISO YYYY-MM-DD manually
+
+            if (rawDate.includes('/') || rawDate.includes('-')) {
+                const parts = rawDate.split(/[\/-]/);
+                if (parts.length === 3) {
+                    // Check if it's ISO (Year first: 2026-05-15)
+                    if (parts[0].length === 4) {
+                        dateFinal = rawDate; // Already ISO
+                    } else {
+                        // Assume DD/MM/YYYY
+                        const day = parts[0].padStart(2, '0');
+                        const month = parts[1].padStart(2, '0');
+                        let year = parts[2];
+
+                        // Handle 2-digit year (e.g., 26 -> 2026)
+                        if (year.length === 2) year = '20' + year;
+
+                        dateFinal = `${year}-${month}-${day}`;
+                    }
+                }
+            } else if (rawDate.match(/^\d{8}$/)) {
+                // Fallback for YYYYMMDD if needed, but sticking to requested logic mostly
+            }
+
+            // Value Cleaning
+            // Remove 'R$', 'US$', space, etc. Keep digits, comma, dot, minus.
+            // Replace logic: 
+            // 1. Remove non-numeric/separators: [^0-9,.-]
+            // 2. Detect locale (PT-BR vs US)
+            //    If comma appears AFTER dot (1.200,50), or comma exists but no dot (1200,50) -> PT-BR
+            //    If dot appears AFTER comma (1,200.50), or dot exists but no comma (1200.50) -> US
+
+            let valClean = rawVal.replace(/"/g, '').replace(/[^\d.,-]/g, '');
+
+            // Heuristic: Last separator decides
+            const lastDot = valClean.lastIndexOf('.');
+            const lastComma = valClean.lastIndexOf(',');
+
+            if (lastComma > lastDot) {
+                // Comma is decimal separator (PT-BR)
+                // Remove all dots, replace comma with dot
+                valClean = valClean.replace(/\./g, '').replace(',', '.');
+            } else if (lastDot > lastComma) {
+                // Dot is decimal separator (US)
+                // Remove all commas
+                valClean = valClean.replace(/,/g, '');
+            } else {
+                // No separators or just one type?
+                // If just comma: '1200,50' -> PT-BR handled above (comma > -1)
+                // If just dot: '1200.50'   -> US handled above (dot > -1)
+                // If neither, integer.
+            }
+
+            const valNum = parseFloat(valClean);
+
+            if (!dateFinal || isNaN(valNum)) continue;
+
+            const category = this.getCategoryFromDescription(rawDesc);
+
+            // Add Transaction
+            this.transactions.push({
+                id: Date.now().toString() + Math.random(),
+                date: dateFinal,
+                description: rawDesc.replace(/"/g, '').trim(),
+                category: category,
+                type: 'expense',
+                value: Math.abs(valNum),
+                cardId: this.currentCardId
+            });
+            transactionsAdded++;
+        }
+
+        if (transactionsAdded > 0) {
+            this.saveAll();
+            this.renderCardDetails();
+            this.showToast(`${transactionsAdded} transações importadas!`, 'success');
+        } else {
+            this.showToast('Nenhuma transação válida encontrada. Verifique o formato.', 'warning');
+        }
+    }
+
+    getCategoryFromDescription(desc) {
+        const d = desc.toLowerCase();
+
+        // Simple Auto-Categorization Rules
+        if (d.includes('uber') || d.includes('99') || d.includes('posto') || d.includes('combustivel')) return 'Transporte';
+        if (d.includes('ifood') || d.includes('rappi') || d.includes('restaurante') || d.includes('mc donalds') || d.includes('burger')) return 'Alimentação';
+        if (d.includes('netflix') || d.includes('spotify') || d.includes('amazon') || d.includes('cinema') || d.includes('steam')) return 'Lazer';
+        if (d.includes('farmacia') || d.includes('drogasil') || d.includes('saude') || d.includes('medico')) return 'Saúde';
+        if (d.includes('mercado') || d.includes('atacad') || d.includes('carrefour') || d.includes('pao de acucar')) return 'Mercado';
+
+        return 'Outros'; // Default
     }
 
     exportData() {
@@ -647,12 +1481,14 @@ class FinanceApp {
                     this.saveAll();
                     this.monthYearInput.value = this.getCurrentMonthStr();
                     this.render();
-                    alert('Dados importados com sucesso!');
-                    location.reload(); // Reload to refresh all components cleanly
+                    this.monthYearInput.value = this.getCurrentMonthStr();
+                    this.render();
+                    this.showToast('Dados importados com sucesso!');
+                    setTimeout(() => location.reload(), 1500); // Reload to refresh all components cleanly
                 } else {
-                    alert('Formato de arquivo inválido.');
+                    this.showToast('Formato de arquivo inválido.', 'error');
                 }
-            } catch (err) { console.error(err); alert('Erro ao ler JSON.'); }
+            } catch (err) { console.error(err); this.showToast('Erro ao ler JSON.', 'error'); }
             inputElement.value = '';
         };
         reader.readAsText(file);
