@@ -7,7 +7,7 @@
     <title>Controle Financeiro Pessoal</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -113,23 +113,24 @@
         </section>
 
         <!-- Navigation Tabs -->
+        <!-- Navigation Tabs -->
         <nav class="tabs-nav">
-            <button class="tab-btn active" data-tab="resume">
+            <button class="tab-btn active" id="btn-resume" data-target="view-resume">
                 <i class="fa-solid fa-chart-column"></i> Resumo
             </button>
-            <button class="tab-btn" data-tab="categories">
+            <button class="tab-btn" id="btn-categories" data-target="view-categories">
                 <i class="fa-solid fa-tags"></i> Categorias
             </button>
-            <button class="tab-btn" data-tab="fixed">
+            <button class="tab-btn" id="btn-fixed" data-target="view-fixed">
                 <i class="fa-solid fa-rotate"></i> Despesas Fixas
             </button>
-            <button class="tab-btn" data-tab="projection">
+            <button class="tab-btn" id="btn-projection" data-target="view-projection">
                 <i class="fa-solid fa-calendar-days"></i> Projeção
             </button>
-            <button class="tab-btn" data-tab="goals">
+            <button class="tab-btn" id="btn-goals" data-target="view-goals">
                 <i class="fa-solid fa-bullseye"></i> Metas
             </button>
-            <button class="tab-btn" data-tab="cards">
+            <button class="tab-btn" id="btn-cards" data-target="view-cards">
                 <i class="fa-solid fa-credit-card"></i> Cartões
             </button>
         </nav>
@@ -138,7 +139,7 @@
         <main class="content-area">
 
             <!-- RESUMO TAB (Transactions) -->
-            <div id="tab-resume" class="tab-content active">
+            <div id="view-resume" class="tab-content active">
                 <div class="section-header">
                     <h2><i class="fa-solid fa-money-bill-transfer"></i> Transações</h2>
                     <button class="btn btn-success" onclick="window.app.openModal()">
@@ -165,7 +166,7 @@
             </div>
 
             <!-- CATEGORIAS TAB -->
-            <div id="tab-categories" class="tab-content" style="display: none;">
+            <div id="view-categories" class="tab-content">
                 <div class="section-header">
                     <h2><i class="fa-solid fa-tags"></i> Gerenciar Categorias</h2>
                     <div class="add-cat-form">
@@ -181,7 +182,7 @@
             </div>
 
             <!-- DESPESAS FIXAS TAB -->
-            <div id="tab-fixed" class="tab-content" style="display: none;">
+            <div id="view-fixed" class="tab-content">
                 <div class="section-header">
                     <h2><i class="fa-solid fa-rotate"></i> Despesas Fixas</h2>
                     <button class="btn btn-success" onclick="window.app.openFixedModal()">
@@ -236,7 +237,7 @@
             </div>
 
             <!-- PROJEÇÃO TAB -->
-            <div id="tab-projection" class="tab-content" style="display: none;">
+            <div id="view-projection" class="tab-content">
                 <div class="section-header">
                     <h2><i class="fa-solid fa-chart-line"></i> Projeção Financeira</h2>
                 </div>
@@ -255,7 +256,7 @@
             </div>
 
             <!-- METAS TAB -->
-            <div id="tab-goals" class="tab-content" style="display: none;">
+            <div id="view-goals" class="tab-content">
                 <div class="section-header">
                     <h2><i class="fa-solid fa-bullseye"></i> Metas Financeiras</h2>
                     <button class="btn btn-success" onclick="window.app.openGoalModal()">
@@ -268,7 +269,7 @@
             </div>
 
             <!-- CARTÕES TAB -->
-            <div id="tab-cards" class="tab-content" style="display: none;">
+            <div id="view-cards" class="tab-content">
                 <div class="section-header">
                     <h2><i class="fa-solid fa-credit-card"></i> Meus Cartões</h2>
                     <div class="cards-actions">
@@ -585,6 +586,25 @@
         </div>
     </div>
 
+    <script>
+        // Singleton Supabase Client Logic
+        // This ensures createClient is only called once even if hot-reloaded or script re-runs
+        if (!window.supabaseClient) {
+            const SUPABASE_URL = 'https://eompoldgjvaqldcvqnfs.supabase.co';
+            const SUPABASE_KEY = 'sb_publishable_37lCjvx_7eHGpHLp4wE0aA_z0Myfp8m';
+
+            if (window.supabase) {
+                try {
+                    window.supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                    console.log('Supabase Connected');
+                } catch (e) {
+                    console.error('Supabase Init Error:', e);
+                }
+            } else {
+                console.error('Supabase Library NOT Loaded via CDN');
+            }
+        }
+    </script>
     <script src="app.js"></script>
 </body>
 

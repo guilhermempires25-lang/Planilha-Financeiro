@@ -11,11 +11,6 @@ const CATEGORY_ICONS = {
     'Outros': '🏷️'
 };
 
-// --- Configuração Supabase ---
-const SUPABASE_URL = 'https://eompoldgjvaqldcvqnfs.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_37lCjvx_7eHGpHLp4wE0aA_z0Myfp8m';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
 class FinanceApp {
     constructor() {
         this.transactions = [];
@@ -23,550 +18,536 @@ class FinanceApp {
         this.fixedExpenses = [];
         this.goals = [];
         this.cards = [];
-        this.currentDate = new Date();
+        this.config = { id: null, saldo_inicial: 0 };
 
-        // No localStorage for balance. Starts at 0. 
-        // User can add a "Saldo Inicial" transaction if needed.
-        this.initialBalance = 0;
-
-        this.chartInstance = null;
-        this.categoryChartInstance = null;
         this.currentCardId = null;
+        this.chartInstance = null;
+
+        this.supabase = window.supabaseClient;
 
         this.init();
     }
 
     async init() {
-        // Elements
-        this.monthYearInput = document.getElementById('monthYear');
-
-        // Modals
-        this.transactionModal = document.getElementById('transactionModal');
-        this.fixedModal = document.getElementById('fixedModal');
-        this.goalModal = document.getElementById('goalModal');
-        this.cardModal = document.getElementById('cardModal');
-        this.cardDetailsModal = document.getElementById('cardDetailsModal');
-        this.installmentsModal = document.getElementById('installmentsModal');
-
-        // Forms
-        this.transactionForm = document.getElementById('transactionForm');
-        this.fixedForm = document.getElementById('fixedForm');
-        this.goalForm = document.getElementById('goalForm');
-        this.cardForm = document.getElementById('cardForm');
-
-        // Initial Values
-        this.monthYearInput.value = this.getCurrentMonthStr();
-
-        // Theme (System Preference)
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            document.body.classList.add('dark-mode');
-            document.querySelector('.theme-toggle i').classList.replace('fa-moon', 'fa-sun');
+        if (!this.supabase) {
+            console.error('Supabase Client not found!');
+            this.showToast('Erro Critico: Banco de dados offline', 'error');
+            return;
         }
 
-        // Listeners
-        this.monthYearInput.addEventListener('change', () => this.render());
-        document.getElementById('tagFilter').addEventListener('change', () => this.render());
+        this.cacheElements();
+        this.bindEvents();
 
-        // Form Submits
-        this.transactionForm.addEventListener('submit', (e) => this.handleTransactionSubmit(e));
-        this.fixedForm.addEventListener('submit', (e) => this.handleFixedSubmit(e));
-        this.goalForm.addEventListener('submit', (e) => this.handleGoalSubmit(e));
-        this.cardForm.addEventListener('submit', (e) => this.handleCardSubmit(e));
+        if (this.els.monthYear) this.els.monthYear.value = this.getCurrentMonthStr();
+        this.initTheme();
 
-        // Close Modals
-        window.onclick = (event) => {
-            if (event.target == this.transactionModal || event.target == this.fixedModal ||
-                event.target == this.goalModal || event.target == this.cardModal ||
-                event.target == this.cardDetailsModal || event.target == this.installmentsModal) {
-                this.closeAllModals();
-            }
-        };
-
-        // Tabs
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.addEventListener('click', () => this.switchTab(btn));
-        });
-
-        // LOAD DATA
-        this.showToast('Conectando ao Supabase...', 'info');
+        this.showToast('Carregando...', 'info');
         await this.loadData();
         this.render();
     }
 
-    closeAllModals() {
-        document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
-        this.currentCardId = null;
+    cacheElements() {
+        this.els = {
+            monthYear: document.getElementById('monthYear'),
+            tagFilter: document.getElementById('tagFilter'),
+            initialBalance: document.getElementById('initialBalance'),
+
+            income: document.getElementById('incomeDisplay'),
+            expense: document.getElementById('expenseDisplay'),
+            monthBalance: document.getElementById('monthlyBalanceDisplay'),
+            finalBalance: document.getElementById('finalBalanceDisplay'),
+
+            transList: document.getElementById('transactionsBody'),
+            categoriesList: document.getElementById('categoriesList'), // Added
+            fixedIncomeList: document.getElementById('fixedIncomeBody'),
+            fixedExpensesList: document.getElementById('fixedExpensesBody'),
+            cardsList: document.getElementById('cardsList'),
+            goalsList: document.getElementById('goalsList'),
+
+            transModal: document.getElementById('transactionModal'),
+            fixedModal: document.getElementById('fixedModal'),
+            goalModal: document.getElementById('goalModal'),
+            cardModal: document.getElementById('cardModal'),
+            cardDetailsModal: document.getElementById('cardDetailsModal'),
+            instModal: document.getElementById('installmentsModal'),
+
+            transForm: document.getElementById('transactionForm'),
+            fixedForm: document.getElementById('fixedForm'),
+            goalForm: document.getElementById('goalForm'),
+            cardForm: document.getElementById('cardForm'),
+
+            detailCardName: document.getElementById('detailCardName'),
+            detailCardInvoice: document.getElementById('detailCardInvoice'),
+            detailCardLimit: document.getElementById('detailCardLimit'),
+            detailCardPeriod: document.getElementById('detailCardPeriod'),
+            cardTransBody: document.getElementById('cardTransactionsBody')
+        };
     }
 
+    bindEvents() {
+        if (this.els.monthYear) this.els.monthYear.addEventListener('change', () => this.render());
+        if (this.els.tagFilter) this.els.tagFilter.addEventListener('change', () => this.render());
+        // Initial Balance Change
+        if (this.els.initialBalance) this.els.initialBalance.addEventListener('change', (e) => this.updateInitialBalance(e.target.value));
+
+        if (this.els.transForm) this.els.transForm.addEventListener('submit', (e) => this.handleTransactionSubmit(e));
+        if (this.els.fixedForm) this.els.fixedForm.addEventListener('submit', (e) => this.handleFixedSubmit(e));
+        if (this.els.goalForm) this.els.goalForm.addEventListener('submit', (e) => this.handleGoalSubmit(e));
+        if (this.els.cardForm) this.els.cardForm.addEventListener('submit', (e) => this.handleCardSubmit(e));
+
+        window.onclick = (event) => {
+            const modals = [this.els.transModal, this.els.fixedModal, this.els.goalModal, this.els.cardModal, this.els.cardDetailsModal, this.els.instModal];
+            if (modals.includes(event.target)) this.closeAllModals();
+        };
+
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => this.switchTab(btn));
+        });
+    }
+
+    initTheme() {
+        const themeBtn = document.getElementById('themeToggle');
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.body.classList.add('dark-mode');
+            if (themeBtn) {
+                const i = themeBtn.querySelector('i');
+                if (i) i.classList.replace('fa-moon', 'fa-sun');
+            }
+        }
+        if (themeBtn) themeBtn.onclick = () => this.toggleTheme();
+    }
+
+    toggleTheme() {
+        document.body.classList.toggle('dark-mode');
+        const themeBtn = document.getElementById('themeToggle');
+        if (themeBtn) {
+            const i = themeBtn.querySelector('i');
+            if (i) {
+                if (document.body.classList.contains('dark-mode')) i.classList.replace('fa-moon', 'fa-sun');
+                else i.classList.replace('fa-sun', 'fa-moon');
+            }
+        }
+    }
+
+    // --- DATA ---
     async loadData() {
-        const [transReq, fixReq, cardReq, goalReq] = await Promise.all([
-            supabase.from('transacoes').select('*'),
-            supabase.from('despesas_fixas').select('*'),
-            supabase.from('cartoes').select('*'),
-            supabase.from('metas').select('*')
+        const query = (table) => this.supabase.from(table).select('*');
+
+        const [trans, fix, cards, goals, conf] = await Promise.all([
+            query('transacoes'),
+            query('despesas_fixas'),
+            query('cartoes'),
+            query('metas'),
+            query('configuracoes')
         ]);
 
-        if (transReq.error) console.error(transReq.error);
-        else this.transactions = transReq.data || [];
+        if (trans.error) console.error('Trans Error:', trans.error);
 
-        if (fixReq.error) console.error(fixReq.error);
-        else this.fixedExpenses = fixReq.data || [];
+        this.transactions = trans.data || [];
+        this.fixedExpenses = fix.data || [];
+        this.cards = cards.data || [];
+        this.goals = goals.data || [];
 
-        if (cardReq.error) console.error(cardReq.error);
-        else this.cards = cardReq.data || [];
+        if (conf.data && conf.data.length > 0) {
+            this.config = conf.data[0];
+            if (this.els.initialBalance) this.els.initialBalance.value = this.config.saldo_inicial;
+        } else {
+            // Create default config if missing (optimistic)
+            this.config = { saldo_inicial: 0 };
+            // Try insert default
+            this.supabase.from('configuracoes').insert([{ saldo_inicial: 0 }])
+                .then(({ data }) => { if (data) this.config = data[0]; });
+        }
 
-        if (goalReq.error) console.error(goalReq.error);
-        else this.goals = goalReq.data || [];
-
-        this.showToast('Dados sincronizados.', 'success');
+        this.showToast('Dados Sincronizados');
     }
 
-    // --- Transactions ---
+    async updateInitialBalance(val) {
+        const v = parseFloat(val) || 0;
+        this.config.saldo_inicial = v;
+        if (this.config.id) {
+            await this.supabase.from('configuracoes').update({ saldo_inicial: v }).eq('id', this.config.id);
+        } else {
+            const { data } = await this.supabase.from('configuracoes').insert([{ saldo_inicial: v }]).select();
+            if (data) this.config = data[0];
+        }
+        this.render(); // Re-calculate finals
+    }
+
+    // --- HELPER METHODS (EXPOSED) ---
+    toggleNotifications() {
+        const drop = document.getElementById('notifDropdown');
+        if (drop) drop.style.display = drop.style.display === 'none' ? 'block' : 'none';
+    }
+
+    setSavingsGoal() {
+        const val = prompt('Qual sua meta de economia mensal? (R$)');
+        if (val) this.showToast(`Meta: R$ ${val}`);
+    }
+
+    addCategory() {
+        const input = document.getElementById('newCatName');
+        if (!input || !input.value) return;
+        this.categories.push(input.value);
+        this.render(); // Re-render categories list
+        this.renderCategoryOptions();
+        this.showToast(`Categoria ${input.value} adicionada!`);
+        input.value = '';
+    }
+
+    exportData() {
+        const data = {
+            transactions: this.transactions,
+            fixedExpenses: this.fixedExpenses,
+            cards: this.cards,
+            goals: this.goals,
+            config: this.config
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `financeiro_backup.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    async importData(input) {
+        if (!input.files[0]) return;
+        // Placeholder
+        alert('Importação JSON em desenvolvimento.');
+        input.value = '';
+    }
+
+    // --- ACTIONS ---
 
     openModal(cardId = null) {
         this.currentCardId = cardId;
         this.renderCategoryOptions();
-        document.getElementById('date').value = new Date().toISOString().split('T')[0];
-        document.querySelector('#transactionModal h3').innerText = cardId ? 'Nova Compra (Cartão)' : 'Nova Transação';
-        this.transactionModal.classList.add('active');
+        const dateInput = document.getElementById('transDate');
+        if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+        const title = this.els.transModal ? this.els.transModal.querySelector('h3') : null;
+        if (title) title.innerText = cardId ? 'Nova Compra (Cartão)' : 'Nova Transação';
+        if (this.els.transModal) this.els.transModal.classList.add('active');
     }
 
-    closeModal() { this.closeAllModals(); this.transactionForm.reset(); }
+    closeAllModals() {
+        document.querySelectorAll('.modal').forEach(m => m.classList.remove('active'));
+        if (this.els.transForm) this.els.transForm.reset();
+        if (this.els.fixedForm) this.els.fixedForm.reset();
+        if (this.els.goalForm) this.els.goalForm.reset();
+        if (this.els.cardForm) this.els.cardForm.reset();
+        this.currentCardId = null;
+    }
+    closeModal() { this.closeAllModals(); }
+    closeFixedModal() { this.closeAllModals(); }
+    closeGoalModal() { this.closeAllModals(); }
+    closeCardModal() { this.closeAllModals(); }
+    closeCardDetailsModal() { this.closeAllModals(); }
+    closeInstallmentsModal() { this.closeAllModals(); }
 
     async handleTransactionSubmit(e) {
         e.preventDefault();
-        const type = document.getElementById('type').value;
-        const desc = document.getElementById('description').value;
-        const amount = parseFloat(document.getElementById('amount').value);
-        const date = document.getElementById('date').value;
-        const category = document.getElementById('category').value;
-        const tag = document.getElementById('tag').value;
-        const installments = parseInt(document.getElementById('installments').value) || 1;
+        const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
 
-        const baseTrans = {
-            data: date, descricao: desc, valor: amount, categoria: category, tipo: type, tag: tag, card_id: this.currentCardId
+        const date = getVal('transDate');
+        const desc = getVal('transDesc');
+        const val = parseFloat(getVal('transValue'));
+        const cat = getVal('transCategory');
+
+        let type = 'expense';
+        const typeEl = document.querySelector('input[name="transType"]:checked');
+        if (typeEl) type = typeEl.value;
+
+        const tags = getVal('transTags');
+        const inst = parseInt(getVal('transInstallments')) || 1;
+
+        const base = {
+            data: date, descricao: desc, valor: val, categoria: cat, tipo: type, tag: tags, card_id: this.currentCardId
         };
 
-        if (installments > 1 && type === 'expense') {
+        // Sanitize
+        Object.keys(base).forEach(k => base[k] === undefined && delete base[k]);
+
+        if (inst > 1 && type === 'expense') {
             const batch = [];
-            const groupId = crypto.randomUUID();
-            const valPerInst = parseFloat((amount / installments).toFixed(2));
-            const baseDateObj = new Date(date);
-
-            for (let i = 0; i < installments; i++) {
-                const d = new Date(baseDateObj);
-                d.setMonth(d.getMonth() + i);
-
+            const d = new Date(date);
+            const valPart = parseFloat((val / inst).toFixed(2));
+            for (let i = 0; i < inst; i++) {
+                const currentD = new Date(d);
+                currentD.setMonth(d.getMonth() + i);
                 batch.push({
-                    ...baseTrans,
-                    data: d.toISOString().split('T')[0],
-                    descricao: `${desc} (${i + 1}/${installments})`,
-                    valor: valPerInst,
-                    installment_current: i + 1,
-                    installment_total: installments,
-                    // installment_id not strictly required by user list, but useful. 
-                    // If columns doesn't exist, Supabase might ignore or error. 
-                    // User list: installment_current, installment_total. I will omit ID to be safe with user list.
+                    ...base,
+                    data: currentD.toISOString().split('T')[0],
+                    descricao: `${desc} (${i + 1}/${inst})`,
+                    valor: valPart,
+                    installment_current: i + 1, installment_total: inst
                 });
             }
-            const { data, error } = await supabase.from('transacoes').insert(batch).select();
-            if (error) this.showToast('Erro: ' + error.message, 'error');
-            else {
-                this.transactions.push(...data);
-                this.closeModal();
-                this.render();
-                this.showToast('Parcelamento salvo!');
-            }
+            const { data, error } = await this.supabase.from('transacoes').insert(batch).select();
+            if (!error) { this.transactions.push(...data); this.success('Parcelamento Salvo'); }
+            else this.error(error.message);
         } else {
-            const { data, error } = await supabase.from('transacoes').insert([baseTrans]).select();
-            if (error) this.showToast('Erro: ' + error.message, 'error');
-            else {
-                this.transactions.push(data[0]);
-                this.closeModal();
-                this.render();
-                this.showToast('Salvo!');
-            }
+            const { data, error } = await this.supabase.from('transacoes').insert([base]).select();
+            if (!error) { this.transactions.push(data[0]); this.success('Salvo'); }
+            else this.error(error.message);
         }
     }
 
     async deleteTransaction(id) {
         if (!confirm('Excluir?')) return;
-        const { error } = await supabase.from('transacoes').delete().eq('id', id);
+        const { error } = await this.supabase.from('transacoes').delete().eq('id', id);
         if (!error) {
             this.transactions = this.transactions.filter(t => t.id !== id);
             this.render();
-            this.showToast('Excluído.');
-        }
+            this.showToast('Excluído');
+        } else this.error(error.message);
     }
 
-    // --- Fixed Expenses ---
-
-    openFixedModal() { this.renderCategoryOptions(); this.fixedModal.classList.add('active'); }
-    closeFixedModal() { this.closeAllModals(); this.fixedForm.reset(); }
+    openFixedModal() { this.renderCategoryOptions(); if (this.els.fixedModal) this.els.fixedModal.classList.add('active'); }
 
     async handleFixedSubmit(e) {
         e.preventDefault();
+        const getVal = (id) => document.getElementById(id) ? document.getElementById(id).value : '';
         const fix = {
-            dia_vencimento: parseInt(document.getElementById('fixedDay').value),
-            descricao: document.getElementById('fixedDesc').value,
-            categoria: document.getElementById('fixedCategory').value,
-            valor: parseFloat(document.getElementById('fixedValue').value),
-            // User schema list for despesas_fixas didn't explicitly say 'tipo', 
-            // but my migration had it. Trying to insert it might error if he strictly followed his list.
-            // But he needs to differentiate Income/Expense. I will try to insert 'categoria' and imply type? 
-            // No, better to try inserting. If it fails, he needs to alter table.
-            // I'll assume standard 'expense' if not present? 
-            // I'll assume the migration I gave him was run.
-            // The form has a radio for Type.
+            dia_vencimento: parseInt(getVal('fixedDay')),
+            descricao: getVal('fixedDesc'),
+            categoria: getVal('fixedCategory'),
+            valor: parseFloat(getVal('fixedValue')),
         };
-        // Adding 'tipo' to object only if I'm sure... User list: id, dia_vencimento, descricao, categoria, valor.
-        // It's MISSING 'tipo'.
-        // If I insert 'tipo', it will error.
-        // But wait, user said "Rodei o SQL". My SQL had 'tipo'. 
-        // I will trust my SQL.
+        let tEl = document.querySelector('input[name="fixedType"]:checked');
+        if (tEl) fix.tipo = tEl.value;
 
-        // However, looking at index.html (lines 452 in previous view), there IS a fixedType input.
-        // I should read it.
-        const typeEl = document.querySelector('input[name="fixedType"]:checked');
-        if (typeEl) {
-            // If I send it and it ignores, fine. If error, user will report.
-            // I'll add strict error handling.
-            // But actually, I can't easily support Fixed Income without a Type column.
-            // I'll bet it's there.
-            // fix.tipo = typeEl.value; 
-            // Actually, Supabase ignores extra fields in JS object if not in schema? No, it errors.
-            // Use "upsert"? No.
-            // I will include it.
-        }
-
-        const { data, error } = await supabase.from('despesas_fixas').insert([fix]).select();
-        if (error) this.showToast('Erro: ' + error.message, 'error');
-        else {
+        const { data, error } = await this.supabase.from('despesas_fixas').insert([fix]).select();
+        if (!error) {
             this.fixedExpenses.push(data[0]);
-            this.showToast('Despesa Fixa salva!');
-            this.closeFixedModal();
-            this.render();
-        }
-    }
-
-    async generateFixedExpenses() {
-        const today = new Date();
-        const y = today.getFullYear();
-        const m = String(today.getMonth() + 1).padStart(2, '0');
-
-        // Logic to avoid duplicates without localStorage:
-        // Check if ANY transaction in current month matches the Fixed Expenses distinctively.
-
-        let generatedCount = 0;
-
-        // Pre-fetch transactions for this month if not already sufficient?
-        // We have all transactions loaded.
-
-        const monthTrans = this.transactions.filter(t => t.data.startsWith(`${y}-${m}`));
-
-        const batch = [];
-        this.fixedExpenses.forEach(fix => {
-            // Check existence
-            const exists = monthTrans.some(t =>
-                t.descricao === fix.descricao &&
-                Math.abs(t.valor - fix.valor) < 0.01 // float tolerance
-            );
-
-            if (!exists) {
-                batch.push({
-                    data: `${y}-${m}-${String(fix.dia_vencimento).padStart(2, '0')}`,
-                    descricao: fix.descricao,
-                    valor: fix.valor,
-                    categoria: fix.categoria,
-                    tipo: 'expense' // Defaulting to expense as 'tipo' might be missing in fixedExpenses table per user list
-                    // If table fixedExpenses has no Type, we can't know. 
-                    // But 'transacoes' DEFINITELY has 'tipo'.
-                });
-            }
-        });
-
-        if (batch.length === 0) {
-            this.showToast('Todas as despesas fixas já existem neste mês.');
-            return;
-        }
-
-        const { data, error } = await supabase.from('transacoes').insert(batch).select();
-        if (error) this.showToast('Erro: ' + error.message, 'error');
-        else {
-            this.transactions.push(...data);
-            this.render();
-            this.showToast(`${batch.length} gerados!`);
-            this.switchTab(document.querySelector('[data-tab="resume"]'));
-        }
+            this.success('Fixo Salvo');
+        } else this.error(error.message);
     }
 
     async deleteFixedExpense(id) {
         if (!confirm('Excluir?')) return;
-        await supabase.from('despesas_fixas').delete().eq('id', id);
-        this.fixedExpenses = this.fixedExpenses.filter(e => e.id !== id);
+        await this.supabase.from('despesas_fixas').delete().eq('id', id);
+        this.fixedExpenses = this.fixedExpenses.filter(f => f.id !== id);
         this.render();
     }
 
-    // --- Cards ---
+    openCardModal() { if (this.els.cardModal) this.els.cardModal.classList.add('active'); }
 
     async handleCardSubmit(e) {
         e.preventDefault();
-        const name = document.getElementById('cardName').value;
-        const limit = parseFloat(document.getElementById('cardLimit').value);
-        // Getting values safely from potentially hidden fields
-        const cVal = document.getElementById('cardClosingDay').value;
-        const dVal = document.getElementById('cardDueDay').value;
+        const getVal = (id) => document.getElementById(id) ? document.getElementById(id).value : '';
 
+        // FIX: Ensure values aren't null/undefined which causes 400
         const card = {
-            name: name,
-            limit: limit,
-            closing_day: parseInt(cVal),
-            due_day: parseInt(dVal),
-            color: document.getElementById('cardColor').value
+            name: getVal('cardName') || 'Cartão',
+            limit: parseFloat(getVal('cardLimit')) || 0,
+            closing_day: parseInt(getVal('cardClosingDay')) || 1,
+            due_day: parseInt(getVal('cardDueDay')) || 10,
+            color: getVal('cardColor') || '#000000'
         };
 
-        const { data, error } = await supabase.from('cartoes').insert([card]).select();
-        if (error) this.showToast('Erro: ' + error.message, 'error');
-        else {
-            this.cards.push(data[0]);
-            this.closeAllModals();
-            this.render();
-            this.showToast('Cartão criado!');
-        }
+        const { data, error } = await this.supabase.from('cartoes').insert([card]).select();
+        if (!error) { this.cards.push(data[0]); this.success('Cartão Criado'); }
+        else this.error(error.message);
     }
 
     async deleteCard(id) {
-        if (!confirm('Excluir cartão?')) return;
-        await supabase.from('cartoes').delete().eq('id', id);
+        if (!confirm('Excluir Cartão?')) return;
+        await this.supabase.from('cartoes').delete().eq('id', id);
         this.cards = this.cards.filter(c => c.id !== id);
         this.render();
     }
 
-    // --- CSV Import ---
+    openGoalModal() { if (this.els.goalModal) this.els.goalModal.classList.add('active'); }
+    async handleGoalSubmit(e) {
+        e.preventDefault();
+        const getVal = (id) => document.getElementById(id) ? document.getElementById(id).value : '';
+        const g = {
+            name: getVal('goalName'),
+            target: parseFloat(getVal('goalTarget')) || 0,
+            current: parseFloat(getVal('goalCurrent')) || 0,
+            color: getVal('goalColor') || '#000000'
+        };
+        const { data, error } = await this.supabase.from('metas').insert([g]).select();
+        if (!error) { this.goals.push(data[0]); this.success('Meta Criada'); }
+        else this.error(error.message);
+    }
+
+    openInstallmentsModal() { if (this.els.instModal) this.els.instModal.classList.add('active'); }
 
     async handleCSVImport(input) {
-        if (!this.currentCardId || !input.files[0]) return;
-        const file = input.files[0];
+        // ... Same CSV logic ...
+        if (!input.files[0] || !this.currentCardId) return;
         const reader = new FileReader();
         reader.onload = async (e) => {
             const rows = this.parseCSV(e.target.result);
-            if (rows.length === 0) return this.showToast('Sem dados válidos.', 'warning');
-
-            const insertRows = rows.map(r => ({
-                data: r.date,
-                descricao: r.description,
-                valor: r.value,
-                categoria: r.category,
-                tipo: 'expense',
-                card_id: this.currentCardId
+            if (rows.length === 0) return this.showToast('CSV Inválido', 'warning');
+            const batch = rows.map(r => ({
+                data: r.date, descricao: r.description, valor: r.value, categoria: r.category, tipo: 'expense', card_id: this.currentCardId
             }));
-
-            const { data, error } = await supabase.from('transacoes').insert(insertRows).select();
-            if (error) this.showToast('Erro: ' + error.message, 'error');
-            else {
-                this.transactions.push(...data);
-                this.render();
-                // Refresh card details view
-                this.openCardDetails(this.currentCardId);
-                this.showToast('Importado!');
-            }
+            const { data, error } = await this.supabase.from('transacoes').insert(batch).select();
+            if (!error) { this.transactions.push(...data); this.success('Importado!'); }
+            else this.error(error.message);
         };
-        reader.readAsText(file);
+        reader.readAsText(input.files[0]);
         input.value = '';
     }
 
     parseCSV(text) {
-        // Robust parser
         const lines = text.split('\n').filter(l => l.trim());
-        const result = [];
-        let map = { d: -1, desc: -1, v: -1 };
-
-        // Detect headers
-        for (let i = 0; i < Math.min(lines.length, 5); i++) {
+        let map = { d: -1, desc: -1, v: -1 }, res = [];
+        for (let i = 0; i < lines.length && i < 5; i++) {
             const l = lines[i].toLowerCase();
             if (l.includes('data') || l.includes('date')) {
-                const parts = l.split(/[;,]/);
-                map.d = parts.findIndex(p => p.includes('data') || p.includes('date'));
-                map.desc = parts.findIndex(p => p.includes('desc') || p.includes('memo') || p.includes('hist'));
-                map.v = parts.findIndex(p => p.includes('valor') || p.includes('amount') || p.includes('mn'));
+                const p = l.split(/[;,]/);
+                map.d = p.findIndex(x => x.includes('data') || x.includes('date'));
+                map.desc = p.findIndex(x => x.includes('desc') || x.includes('memo') || x.includes('hist'));
+                map.v = p.findIndex(x => x.includes('valor') || x.includes('amount') || x.includes('mn'));
                 break;
             }
         }
         if (map.d === -1) return [];
-
         lines.forEach(line => {
-            // Split handling quotes
             const row = line.match(/(".*?"|[^",;\s]+)(?=\s*[;,]|\s*$)/g);
             if (!row) return;
             const cols = row.map(c => c.replace(/^"|"$/g, '').trim());
-
-            if (cols[map.d] && cols[map.desc]) {
-                let dStr = cols[map.d];
-                // DD/MM/YYYY
-                if (dStr.match(/^\d{2}[\/-]\d{2}[\/-]\d{4}$/)) {
-                    const [d, m, y] = dStr.split(/[\/-]/);
-                    dStr = `${y}-${m}-${d}`;
-                }
-
-                let vStr = cols[map.v];
-                if (vStr) {
-                    vStr = vStr.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
-                    let val = parseFloat(vStr);
-                    if (!isNaN(val)) {
-                        result.push({
-                            date: dStr,
-                            description: cols[map.desc],
-                            value: Math.abs(val),
-                            category: this.getCategoryFromDescription(cols[map.desc])
-                        });
-                    }
-                }
+            if (cols[map.d] && cols[map.v]) {
+                let d = cols[map.d], v = cols[map.v];
+                if (d.match(/^\d{2}[\/-]\d{2}[\/-]\d{4}$/)) { const [dd, mm, yy] = d.split(/[\/-]/); d = `${yy}-${mm}-${dd}`; }
+                v = parseFloat(v.replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.'));
+                if (!isNaN(v)) res.push({ date: d, description: cols[map.desc] || '', value: Math.abs(v), category: this.getCategoryFromDescription(cols[map.desc] || '') });
             }
         });
-        return result;
+        return res;
     }
 
     getCategoryFromDescription(d) {
         d = d.toLowerCase();
-        if (d.includes('uber') || d.includes('99') || d.includes('posto')) return 'Transporte';
-        if (d.includes('ifood') || d.includes('burger') || d.includes('market')) return 'Alimentação';
-        if (d.includes('netflix') || d.includes('spotify')) return 'Lazer';
+        if (d.includes('uber') || d.includes('combustivel')) return 'Transporte';
+        if (d.includes('food') || d.includes('mercado')) return 'Alimentação';
         return 'Outros';
     }
 
-    // --- UI/Helper Methods ---
-
-    toggleTheme() {
-        document.body.classList.toggle('dark-mode');
-        // No persistence
-    }
-
+    // --- RENDER ---
     render() {
-        // Simple Render
-        this.renderTransactions();
-        this.renderCards();
-        this.renderFixedExpenses();
-        this.renderGoals();
-        this.updateDashboard();
-    }
+        if (!this.els.monthYear) return;
+        const [y, m] = this.els.monthYear.value.split('-');
 
-    renderTransactions() {
-        const [y, m] = this.monthYearInput.value.split('-');
-        const list = this.transactions.filter(t => t.data.startsWith(`${y}-${m}`));
-        list.sort((a, b) => new Date(b.data) - new Date(a.data));
+        const monthTrans = this.transactions.filter(t => t.data.startsWith(`${y}-${m}`));
+        monthTrans.sort((a, b) => new Date(b.data) - new Date(a.data));
 
-        document.getElementById('transactionsList').innerHTML = list.map(t => `
-            <tr>
-                <td>${this.formatDate(t.data)}</td>
-                <td>${t.descricao} <small>${t.installment_total ? `(${t.installment_current}/${t.installment_total})` : ''}</small></td>
-                <td>${this.getCategoryIcon(t.categoria)} ${t.categoria}</td>
-                <td class="${t.tipo === 'income' ? 'text-green' : 'text-red'}">${t.tipo === 'income' ? '+' : '-'} ${this.formatCurrency(t.valor)}</td>
-                <td><button class="btn-icon" onclick="window.app.deleteTransaction('${t.id}')"><i class="fa-solid fa-trash"></i></button></td>
-            </tr>
-        `).join('');
-    }
+        // FIX: 6 Columns to match Header (Data, Desc, Cat, Tipo, Valor, Ação)
+        if (this.els.transList) {
+            this.els.transList.innerHTML = monthTrans.map(t => {
+                const typeLabel = t.tipo === 'income' ? '<span class="text-green">Receita</span>' : '<span class="text-red">Despesa</span>';
+                const sign = t.tipo === 'income' ? '+' : '-';
+                const colorClass = t.tipo === 'income' ? 'text-green' : 'text-red';
 
-    renderCards() {
-        document.getElementById('cardsContainer').innerHTML = this.cards.map(c => `
+                return `
+                <tr>
+                    <td>${this.formatDate(t.data)}</td>
+                    <td>${t.descricao} <small>${t.installment_total ? `(${t.installment_current}/${t.installment_total})` : ''}</small></td>
+                    <td>${this.getCategoryIcon(t.categoria)} ${t.categoria}</td>
+                    <td>${typeLabel}</td>
+                    <td class="${colorClass}">${sign} ${this.formatCurrency(t.valor)}</td>
+                    <td><button class="btn-icon" onclick="window.app.deleteTransaction('${t.id}')"><i class="fa-solid fa-trash"></i></button></td>
+                </tr>`;
+            }).join('');
+        }
+
+        // FIX: Render Categories Grid
+        if (this.els.categoriesList) {
+            this.els.categoriesList.innerHTML = this.categories.map(c => `
+                <div class="card" style="padding:1rem; text-align:center;">
+                    <div style="font-size:2rem;">${this.getCategoryIcon(c)}</div>
+                    <div>${c}</div>
+                </div>
+            `).join('');
+        }
+
+        // Dashboard
+        const cashFlow = monthTrans.filter(t => !t.card_id);
+        const inc = cashFlow.filter(t => t.tipo === 'income').reduce((s, t) => s + t.valor, 0);
+        const exp = cashFlow.filter(t => t.tipo === 'expense').reduce((s, t) => s + t.valor, 0);
+        const initBal = this.config.saldo_inicial || 0;
+
+        this.setText(this.els.income, this.formatCurrency(inc));
+        this.setText(this.els.expense, this.formatCurrency(exp));
+
+        const bal = inc - exp;
+        this.setText(this.els.monthBalance, this.formatCurrency(bal));
+        // Final Balance = Initial + Month Balance
+        this.setText(this.els.finalBalance, this.formatCurrency(initBal + bal));
+
+        this.renderChart(inc, exp);
+
+        // Cards, Fixed, Goals (Already safe)
+        if (this.els.cardsList) {
+            this.els.cardsList.innerHTML = this.cards.map(c => `
              <div class="card credit-card" style="border-left: 4px solid ${c.color}" onclick="window.app.openCardDetails('${c.id}')">
-                <h4>${c.name}</h4>
-                <p>Limite: ${this.formatCurrency(c.limit)}</p>
-                <small>Fecha: ${c.closing_day} | Vence: ${c.due_day}</small>
-             </div>
-        `).join('') + `<div class="card credit-card add-card" onclick="window.app.openCardModal()"><i class="fa fa-plus"></i> Novo Cartão</div>`;
+                 <h4>${c.name}</h4>
+                 <p>Limite: ${this.formatCurrency(c.limit)}</p>
+             </div>`).join('') +
+                `<div class="card credit-card add-card" onclick="window.app.openCardModal()"><i class="fa fa-plus"></i> Novo</div>`;
+        }
+        if (this.currentCardId && this.els.cardDetailsModal && this.els.cardDetailsModal.classList.contains('active')) {
+            this.openCardDetails(this.currentCardId);
+        }
+        if (this.els.fixedExpensesList) {
+            this.els.fixedExpensesList.innerHTML = this.fixedExpenses.filter(f => !f.tipo || f.tipo === 'expense').map(f => `
+                <tr><td>${f.dia_vencimento}</td><td>${f.descricao}</td><td>${f.categoria}</td><td>${this.formatCurrency(f.valor)}</td>
+                <td><button onclick="window.app.deleteFixedExpense('${f.id}')"><i class="fa-trash"></i></button></td></tr>`).join('');
+        }
+        if (this.els.fixedIncomeList) {
+            this.els.fixedIncomeList.innerHTML = this.fixedExpenses.filter(f => f.tipo === 'income').map(f => `
+                <tr><td>${f.dia_vencimento}</td><td>${f.descricao}</td><td>${f.categoria}</td><td>${this.formatCurrency(f.valor)}</td>
+                <td><button onclick="window.app.deleteFixedExpense('${f.id}')"><i class="fa-trash"></i></button></td></tr>`).join('');
+        }
+        if (this.els.goalsList) {
+            this.els.goalsList.innerHTML = this.goals.map(g => `
+             <div class="goal"><p>${g.name}</p><progress value="${g.current}" max="${g.target}"></progress></div>
+             `).join('');
+        }
     }
+
+    setText(el, text) { if (el) el.innerText = text; }
 
     openCardDetails(id) {
+        // ... Same logic ...
         this.currentCardId = id;
         const c = this.cards.find(x => x.id === id);
-        if (!c) return;
-        this.cardDetailsModal.classList.add('active');
-        document.getElementById('detailCardName').innerText = c.name;
+        if (!c || !this.els.cardDetailsModal) return;
 
-        const [y, m] = this.monthYearInput.value.split('-');
-        const dates = this.getInvoiceDates(parseInt(y), parseInt(m) - 1, c.closing_day, c.due_day);
+        this.els.cardDetailsModal.classList.add('active');
+        this.setText(this.els.detailCardName, c.name);
 
-        const invoiceTrans = this.transactions.filter(t => t.card_id === id && new Date(t.data) > dates.start && new Date(t.data) <= dates.end);
-        const total = invoiceTrans.reduce((sum, t) => sum + t.valor, 0);
+        const [y, m] = this.els.monthYear ? this.els.monthYear.value.split('-') : this.getCurrentMonthStr().split('-');
+        const prevClosing = new Date(y, m - 1, c.closing_day);
+        const closing = new Date(y, m, c.closing_day);
+        const start = new Date(prevClosing); start.setDate(start.getDate() + 1);
+        const end = closing;
 
-        document.getElementById('detailCardInvoice').innerText = this.formatCurrency(total);
-        document.getElementById('detailCardLimit').innerText = this.formatCurrency(c.limit - total);
-        document.getElementById('detailCardPeriod').innerText = `${this.formatDate(dates.start.toISOString().split('T')[0])} a ${this.formatDate(dates.end.toISOString().split('T')[0])}`;
+        const txs = this.transactions.filter(t => t.card_id === id && new Date(t.data) >= start && new Date(t.data) <= end);
+        const total = txs.reduce((s, t) => s + t.valor, 0);
 
-        document.getElementById('cardTransactionsBody').innerHTML = invoiceTrans.map(t => `
-            <tr>
-                <td>${this.formatDate(t.data)}</td>
-                <td>${t.descricao}</td>
-                <td>${this.formatCurrency(t.valor)}</td>
-                <td><button onclick="window.app.deleteTransaction('${t.id}')"><i class="fa-trash"></i></button></td>
-            </tr>`).join('');
+        this.setText(this.els.detailCardInvoice, this.formatCurrency(total));
+        this.setText(this.els.detailCardLimit, this.formatCurrency(c.limit - total));
+        this.setText(this.els.detailCardPeriod, `${this.formatDate(start.toISOString().split('T')[0])} a ${this.formatDate(end.toISOString().split('T')[0])}`);
+
+        if (this.els.cardTransBody) {
+            this.els.cardTransBody.innerHTML = txs.map(t => `
+             <tr><td>${this.formatDate(t.data)}</td><td>${t.descricao}</td><td>${this.formatCurrency(t.valor)}</td>
+             <td><button onclick="window.app.deleteTransaction('${t.id}')"><i class="fa-trash"></i></button></td></tr>`).join('');
+        }
     }
 
-    getInvoiceDates(year, month, closing, due) {
-        const start = new Date(year, month, closing + 1); // Logic adjusted: Start is day AFTER previous closing
-        if (start.getMonth() !== month) start.setMonth(month); // Handle overflow if needed, but simple is ok
-        // Actually: Invoice for Month M (Due in M+1 usually).
-        // Let's stick to standard logic:
-        // Invoice for JAN. Closing 20.
-        // Period: Dec 21 to Jan 20.
-        // Input: Year=2026, Month=0 (Jan).
-        // Prev Closing: Dec 20, 2025.
-        // Start: Dec 21, 2025.
-        // End: Jan 20, 2026.
-
-        const end = new Date(year, month, closing);
-        const startRange = new Date(year, month - 1, closing); // Previous closing
-        // Actually start is startRange + 1 day?
-        // Let's use simple > comparison.
-        return { start: startRange, end: end };
-    }
-
-    renderFixedExpenses() {
-        document.getElementById('fixedExpensesList').innerHTML = this.fixedExpenses.map(f => `
-            <tr><td>${f.dia_vencimento}</td><td>${f.descricao}</td><td>${f.categoria}</td><td>${this.formatCurrency(f.valor)}</td>
-            <td><button onclick="window.app.deleteFixedExpense('${f.id}')"><i class="fa-trash"></i></button></td></tr>
-        `).join('');
-    }
-
-    renderGoals() {
-        document.getElementById('goalsList').innerHTML = this.goals.map(g => `
-            <div class="goal"><p>${g.name}</p><progress value="${g.current}" max="${g.target}"></progress></div>
-        `).join('');
-    }
-
-    // Goals Submit
-    async handleGoalSubmit(e) {
-        e.preventDefault();
-        const g = {
-            name: document.getElementById('goalName').value,
-            target: parseFloat(document.getElementById('goalTarget').value),
-            current: parseFloat(document.getElementById('goalCurrent').value),
-            color: document.getElementById('goalColor').value
-        };
-        const { data } = await supabase.from('metas').insert([g]).select();
-        this.goals.push(data[0]);
-        this.closeAllModals();
-        this.render();
-    }
-
-    updateDashboard() {
-        const [y, m] = this.monthYearInput.value.split('-');
-        const cur = this.transactions.filter(t => t.data.startsWith(`${y}-${m}`) && !t.card_id);
-        const inc = cur.filter(t => t.tipo === 'income').reduce((s, t) => s + t.valor, 0);
-        const exp = cur.filter(t => t.tipo === 'expense').reduce((s, t) => s + t.valor, 0);
-        document.getElementById('totalIncome').innerText = this.formatCurrency(inc);
-        document.getElementById('totalExpense').innerText = this.formatCurrency(exp);
-        document.getElementById('finalBalance').innerText = this.formatCurrency(inc - exp);
-        this.renderChart(inc, exp);
-    }
-
-    // Chart
     renderChart(inc, exp) {
-        const ctx = document.getElementById('financeChart').getContext('2d');
+        const cvs = document.getElementById('financeChart');
+        if (!cvs) return;
+        const ctx = cvs.getContext('2d');
         if (this.chartInstance) this.chartInstance.destroy();
-        this.chartInstance = new Chart(ctx, {
-            type: 'doughnut', data: { labels: ['Entradas', 'Saídas'], datasets: [{ data: [inc, exp], backgroundColor: ['#22c55e', '#ef4444'] }] }
-        });
+        this.chartInstance = new Chart(ctx, { type: 'doughnut', data: { labels: ['Entradas', 'Saídas'], datasets: [{ data: [inc, exp], backgroundColor: ['#22c55e', '#ef4444'] }] } });
     }
 
     formatCurrency(v) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v); }
@@ -575,35 +556,36 @@ class FinanceApp {
     getCategoryIcon(c) { return CATEGORY_ICONS[c] || '🔹'; }
     renderCategoryOptions() {
         const h = this.categories.map(c => `<option value="${c}">${c}</option>`).join('');
-        document.getElementById('category').innerHTML = h;
-        document.getElementById('fixedCategory').innerHTML = h;
+        const els = [document.getElementById('transCategory'), document.getElementById('fixedCategory')];
+        els.forEach(el => { if (el) el.innerHTML = h; });
     }
+
     switchTab(btn) {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
         btn.classList.add('active');
-        document.getElementById(btn.dataset.tab).classList.add('active');
+        const targetId = btn.dataset.target;
+        const targetView = document.getElementById(targetId);
+        if (targetView) targetView.classList.add('active');
     }
+
+    success(msg) { this.showToast(msg, 'success'); this.closeAllModals(); this.render(); }
+    error(msg) { this.showToast(msg, 'error'); }
     showToast(msg, type = 'info') {
         const t = document.createElement('div'); t.className = `toast toast-${type}`; t.innerText = msg;
         document.body.appendChild(t); setTimeout(() => t.remove(), 3000);
     }
 
     payInvoice() {
-        // ... (Keep existing payment logic)
-        const amountStr = document.getElementById('detailCardInvoice').innerText;
-        const amount = parseFloat(amountStr.replace(/[^\d,]/g, '').replace(',', '.'));
-        if (amount <= 0) return;
         if (!confirm('Pagar Fatura?')) return;
-
-        const card = this.cards.find(c => c.id === this.currentCardId);
-        supabase.from('transacoes').insert([{
-            data: new Date().toISOString().split('T')[0],
-            descricao: `Fatura ${card.name}`,
-            valor: amount, categoria: 'Outros', tipo: 'expense'
-        }]).then(({ error }) => {
-            if (!error) { this.showToast('Pago!'); this.loadData().then(() => this.render()); }
-        });
+        const amtStr = this.els.detailCardInvoice ? this.els.detailCardInvoice.innerText : '0';
+        const val = parseFloat(amtStr.replace(/[^\d,]/g, '').replace(',', '.'));
+        if (val <= 0) return;
+        const c = this.cards.find(x => x.id === this.currentCardId);
+        this.supabase.from('transacoes').insert([{
+            data: new Date().toISOString().split('T')[0], descricao: `Fatura ${c ? c.name : ''}`,
+            valor: val, categoria: 'Outros', tipo: 'expense'
+        }]).then(({ error }) => { if (!error) { this.showToast('Pago'); this.loadData().then(() => this.render()); } });
     }
 }
 window.app = new FinanceApp();
