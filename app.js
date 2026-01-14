@@ -100,7 +100,7 @@ class FinanceApp {
             detailCardInvoice: document.getElementById('detailCardInvoice'),
             detailCardLimit: document.getElementById('detailCardLimit'),
             detailCardPeriod: document.getElementById('detailCardPeriod'),
-            cardTransBody: document.getElementById('cardTransactionsBody'),
+            cardTransList: document.getElementById('cardTransactionsList'),
 
             projChart: document.getElementById('projectionChart'),
             catChart: document.getElementById('categoryChart')
@@ -207,16 +207,22 @@ class FinanceApp {
     }
 
     async fetchCards() {
-        // CORRECTION: Strict syntax for Supabase order
-        const { data, error } = await this.supabase.from('cartoes').select('*').order('color', { ascending: true });
+        const { data, error } = await this.supabase.from('cartoes').select('*');
         if (error) console.error('fetchCards Error:', error);
         this.cards = data || [];
     }
 
     async fetchGoals() {
-        const { data, error } = await this.supabase.from('metas').select('*').order('color', { ascending: true });
-        if (error) console.error('fetchGoals Error:', error);
-        this.goals = data || [];
+        try {
+            const { data, error } = await this.supabase
+                .from('metas')
+                .select('*');
+            if (error) throw error;
+            this.goals = data || [];
+            this.renderGoals();
+        } catch (error) {
+            console.error('Erro ao buscar metas:', error);
+        }
     }
 
     async fetchConfig() {
@@ -226,6 +232,10 @@ class FinanceApp {
         if (data && data.length > 0) {
             this.config = data[0];
             if (this.els.initialBalance) this.els.initialBalance.value = this.config.saldo_inicial;
+            // Load categories if they exist (simplification, assumes we might have added it)
+            if (data[0].categories && Array.isArray(data[0].categories)) {
+                this.categories = data[0].categories;
+            }
         } else {
             this.config = { saldo_inicial: 0 };
             this.supabase.from('configuracoes').insert([{ saldo_inicial: 0 }])
@@ -247,14 +257,7 @@ class FinanceApp {
         if (drop) drop.style.display = drop.style.display === 'none' ? 'block' : 'none';
     }
     setSavingsGoal() { const val = prompt('Meta de economia (R$):'); if (val) this.showToast(`Meta: R$ ${val}`); }
-    addCategory() {
-        const input = document.getElementById('newCatName');
-        if (!input || !input.value) return;
-        this.categories.push(input.value);
-        this.render();
-        this.showToast(`Categoria ${input.value} adicionada!`);
-        input.value = '';
-    }
+
     exportData() {
         const data = { transactions: this.transactions, fixedExpenses: this.fixedExpenses, cards: this.cards, goals: this.goals, config: this.config };
         const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
@@ -341,7 +344,7 @@ class FinanceApp {
     }
 
     openFixedModal() { this.renderCategoryOptions(); if (this.els.fixedModal) this.els.fixedModal.classList.add('active'); }
-    async handleFixedSubmit(e) { /* ... Same ... */
+    async handleFixedSubmit(e) {
         e.preventDefault();
         const getVal = (id) => document.getElementById(id) ? document.getElementById(id).value : '';
         const fix = { dia_vencimento: parseInt(getVal('fixedDay')), descricao: getVal('fixedDesc'), categoria: getVal('fixedCategory'), valor: parseFloat(getVal('fixedValue')) };
@@ -419,7 +422,7 @@ class FinanceApp {
     }
 
     openGoalModal() { if (this.els.goalModal) this.els.goalModal.classList.add('active'); }
-    async handleGoalSubmit(e) { /* ... Same ... */
+    async handleGoalSubmit(e) {
         e.preventDefault();
         const getVal = (id) => document.getElementById(id) ? document.getElementById(id).value : '';
         const g = { name: getVal('goalName'), target: parseFloat(getVal('goalTarget')) || 0, current: parseFloat(getVal('goalCurrent')) || 0, color: getVal('goalColor') || '#000000' };
@@ -499,48 +502,148 @@ class FinanceApp {
         return 'Outros';
     }
 
+    renderGoals() {
+        if (this.els.goalsList) {
+            this.els.goalsList.innerHTML = this.goals.map(g => `<div class="goal"><p>${g.name}</p><progress value="${g.current}" max="${g.target}"></progress></div>`).join('');
+        }
+    }
+
     // --- RENDER ---
     calculateTotals(monthTrans) {
-        // CORRECTION: Explicit logic to sum all effective expenses.
-        // We ensure values are numbers and effective status is checked.
-        // monthTrans is already filtered by Date and (efetivado !== false).
-
         let inc = 0;
         let exp = 0;
-
         monthTrans.forEach(t => {
             const val = parseFloat(t.valor) || 0;
-            if (t.tipo === 'income') {
-                inc += val;
-            } else if (t.tipo === 'expense') {
-                // Double check effective status just in case
-                if (t.efetivado !== false) {
-                    exp += val;
-                }
-            }
+            if (t.tipo === 'income') inc += val;
+            else if (t.tipo === 'expense' && t.efetivado !== false) exp += val;
         });
-
         return { inc, exp };
     }
 
     render() {
         if (!this.els.monthYear) return;
-        const [y, m] = this.els.monthYear.value.split('-');
+        const [y, mStr] = this.els.monthYear.value.split('-');
+        const yNum = parseInt(y), mNum = parseInt(mStr); // 1-12
 
-        const monthTrans = this.transactions.filter(t => t.data.startsWith(`${y}-${m}`) && (t.efetivado !== false));
+        // Filter Transactions: Cash (Calendar) | Card (Invoice Cycle)
+        const monthTrans = this.transactions.filter(t => {
+            if (t.efetivado === false) return false;
+
+            // Normalize Transaction Date
+            const [ty, tm, td] = t.data.split('-').map(Number);
+            const tDate = new Date(ty, tm - 1, td);
+
+            if (!t.card_id) {
+                // Cash: Calendar Month
+                return t.data.startsWith(`${y}-${mStr}`);
+            } else {
+                // Card: Invoice Cycle
+                const card = this.cards.find(c => c.id === t.card_id);
+                if (!card) return t.data.startsWith(`${y}-${mStr}`); // Fallback
+
+                // Invoice for Month M:
+                // Ends: Closing Day of Month M
+                // Starts: Closing Day of Month M-1 + 1 day
+
+                const closingDay = card.closing_day || 1;
+                const closingDate = new Date(yNum, mNum - 1, closingDay); // Current Month Closing
+
+                const startDate = new Date(yNum, mNum - 2, closingDay);   // Previous Month Closing
+                startDate.setDate(startDate.getDate() + 1);               // Start is Next Day
+
+                return tDate >= startDate && tDate <= closingDate;
+            }
+        });
+
         monthTrans.sort((a, b) => new Date(b.data) - new Date(a.data));
 
+
+        // --- TRANSACTIONS LIST RENDERING ---
         if (this.els.transList) {
-            this.els.transList.innerHTML = monthTrans.map(t => {
-                const typeLabel = t.tipo === 'income' ? '<span class="text-green">Receita</span>' : '<span class="text-red">Despesa</span>';
-                const sign = t.tipo === 'income' ? '+' : '-';
-                const colorClass = t.tipo === 'income' ? 'text-green' : 'text-red';
-                return `<tr><td>${this.formatDate(t.data)}</td><td>${t.descricao} <small>${t.installment_total ? `(${t.installment_current}/${t.installment_total})` : ''}</small></td><td>${this.getCategoryIcon(t.categoria)} ${t.categoria}</td><td>${typeLabel}</td><td class="${colorClass}">${sign} ${this.formatCurrency(t.valor)}</td><td><button class="btn-icon delete-btn" onclick="window.app.deleteTransaction('${t.id}')">${TRASH_ICON}</button></td></tr>`;
-            }).join('');
+            const tableEl = this.els.transList.closest('table');
+            const containerEl = tableEl ? tableEl.parentElement : null;
+
+            if (monthTrans.length === 0) {
+                // EMPTY STATE
+                if (tableEl) tableEl.style.display = 'none';
+
+                // Check if empty state already exists
+                let emptyState = containerEl.querySelector('.trans-empty-state');
+                if (!emptyState) {
+                    emptyState = document.createElement('div');
+                    emptyState.className = 'trans-empty-state';
+                    emptyState.innerHTML = `
+                        <div class="empty-icon"><i class="fa-regular fa-folder-open"></i></div>
+                        <div class="empty-text">Nenhuma movimentação neste período.</div>
+                        <div class="empty-subtext">Clique em + Adicionar para começar.</div>
+                    `;
+                    if (containerEl) containerEl.appendChild(emptyState);
+                } else {
+                    emptyState.style.display = 'flex';
+                }
+            } else {
+                // HAS DATA
+                if (tableEl) tableEl.style.display = 'table';
+                const existingEmpty = containerEl ? containerEl.querySelector('.trans-empty-state') : null;
+                if (existingEmpty) existingEmpty.style.display = 'none';
+
+                this.els.transList.innerHTML = monthTrans.map(t => {
+                    const badgeClass = t.tipo === 'income' ? 'income' : 'expense';
+                    const badgeText = t.tipo === 'income' ? 'Receita' : 'Despesa';
+                    const sign = t.tipo === 'income' ? '+' : '-';
+                    const colorClass = t.tipo === 'income' ? 'text-green' : 'text-red';
+
+                    // Meta info for Description column
+                    let descText = `<span class="trans-desc">${t.descricao}</span>`;
+                    if (t.installment_total) descText += ` <span class="trans-meta">(${t.installment_current}/${t.installment_total})</span>`;
+                    if (t.card_id) descText += ` <span class="trans-meta"><i class="fa-regular fa-credit-card"></i></span>`;
+
+                    return `
+                    <tr>
+                        <!-- Col 1: Data -->
+                        <td><span style="color:#9ca3af">${this.formatDate(t.data)}</span></td>
+                        
+                        <!-- Col 2: Descrição -->
+                        <td>${descText}</td>
+                        
+                        <!-- Col 3: Categoria -->
+                        <td>
+                            <div class="cat-cell">
+                                <div class="cat-circle">${this.getCategoryIcon(t.categoria)}</div>
+                                <span>${t.categoria}</span>
+                            </div>
+                        </td>
+
+                        <!-- Col 4: Tipo (Badge) -->
+                        <td><span class="status-badge ${badgeClass}">${badgeText}</span></td>
+                        
+                        <!-- Col 5: Valor -->
+                        <td class="${t.tipo === 'income' ? 'text-emerald-400' : 'text-red-400'} trans-val-lg">
+                            ${sign} ${this.formatCurrency(t.valor)}
+                        </td>
+
+                        <!-- Col 6: Ação -->
+                        <td style="text-align: right;">
+                            <button class="btn-icon delete-btn" onclick="window.app.deleteTransaction('${t.id}')">
+                                ${TRASH_ICON}
+                            </button>
+                        </td>
+                    </tr>`;
+                }).join('');
+            }
         }
 
+
+
         if (this.els.categoriesList) {
-            this.els.categoriesList.innerHTML = this.categories.map(c => `<div class="card" style="padding:1rem; text-align:center;"><div style="font-size:2rem;">${this.getCategoryIcon(c)}</div><div>${c}</div></div>`).join('');
+            this.els.categoriesList.innerHTML = this.categories.map(c => `
+            <div class="category-card">
+                <div class="category-icon">${this.getCategoryIcon(c)}</div>
+                <div class="category-name">${c}</div>
+                <button class="category-delete-btn" onclick="window.app.deleteCategory('${c}')" title="Excluir Categoria">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
+            </div>`).join('');
         }
 
         const { inc, exp } = this.calculateTotals(monthTrans);
@@ -555,90 +658,329 @@ class FinanceApp {
 
         this.renderProjectionCharts(monthTrans);
 
+
         if (this.els.cardsList) {
-            this.els.cardsList.innerHTML = this.cards.map(c => `<div class="card credit-card" style="border-left: 4px solid ${c.color}" onclick="window.app.openCardDetails('${c.id}')"><h4>${c.name}</h4><p>Limite: ${this.formatCurrency(c.limit)}</p></div>`).join('') + `<div class="card credit-card add-card" onclick="window.app.openCardModal()"><i class="fa fa-plus"></i> Novo</div>`;
+            this.els.cardsList.innerHTML = this.cards.map(c => {
+                // Calculate Invoice Total for this Month/Cycle
+                // Note: monthTrans is arguably already filtered by month/year, but for cards it's complex because of cycles.
+                // Reusing the simple filter here for visual summary:
+                // Sum all expense transactions for this card_id in 'monthTrans'
+                const cardTotal = monthTrans.reduce((acc, t) => {
+                    return (t.card_id === c.id && t.tipo === 'expense' && t.efetivado !== false) ? acc + t.valor : acc;
+                }, 0);
+
+                const limit = c.limit || 0;
+                const available = limit - cardTotal;
+                const progress = limit > 0 ? Math.min((cardTotal / limit) * 100, 100) : 0;
+
+                // Color manipulation for gradient (simple darken)
+                const color = c.color || '#3b82f6';
+
+                return `
+                <div class="credit-card" 
+                     style="background: linear-gradient(135deg, ${color}, ${color}DD); box-shadow: 0 10px 20px -5px ${color}66;"
+                     onclick="window.app.openCardDetails('${c.id}')">
+                    
+                    <div class="card-top">
+                        <div class="card-chip"></div>
+                        <h4>${c.name}</h4>
+                    </div>
+
+                    <div class="card-middle">
+                        <div class="card-invoice-label">Fatura Atual</div>
+                        <div class="card-invoice-value">${this.formatCurrency(cardTotal)}</div>
+                    </div>
+
+                    <div class="card-bottom">
+                        <div class="card-limit-info">
+                            <span>Disp: ${this.formatCurrency(available)}</span>
+                            <span>${Math.round(progress)}%</span>
+                        </div>
+                        <div class="card-progress-bg">
+                            <div class="card-progress-fill" style="width: ${progress}%"></div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('') + `
+            <div class="credit-card empty-slot" onclick="window.app.openCardModal()">
+                <div class="new-card-icon"><i class="fa-solid fa-plus"></i></div>
+                <div>Novo Cartão</div>
+            </div>`;
         }
 
+
+
+        // --- RENDER OLD TO NEW CARD MAPPING ---
         if (this.els.fixedExpensesList) {
-            this.els.fixedExpensesList.innerHTML = this.fixedExpenses.filter(f => !f.tipo || f.tipo === 'expense').map(f => `<tr><td>${f.dia_vencimento}</td><td>${f.descricao}</td><td>${f.categoria}</td><td>${this.formatCurrency(f.valor)}</td><td><button class="delete-btn" onclick="window.app.deleteFixedExpense('${f.id}')">${TRASH_ICON}</button></td></tr>`).join('');
+            this.els.fixedExpensesList.innerHTML = this.fixedExpenses.filter(f => !f.tipo || f.tipo === 'expense').map(f => `
+            <div class="fixed-card expense-border">
+                <div class="fixed-date-box">${f.dia_vencimento}</div>
+                <div class="fixed-info">
+                    <span class="fixed-title">${f.descricao}</span>
+                    <span class="fixed-cat">${this.getCategoryIcon(f.categoria)} ${f.categoria}</span>
+                </div>
+                <div class="fixed-value">${this.formatCurrency(f.valor)}</div>
+                <div class="fixed-actions">
+                    <button class="delete-btn" onclick="window.app.deleteFixedExpense('${f.id}')" title="Excluir">
+                        ${TRASH_ICON}
+                    </button>
+                </div>
+            </div>`).join('');
         }
         if (this.els.fixedIncomeList) {
-            this.els.fixedIncomeList.innerHTML = this.fixedExpenses.filter(f => f.tipo === 'income').map(f => `<tr><td>${f.dia_vencimento}</td><td>${f.descricao}</td><td>${f.categoria}</td><td>${this.formatCurrency(f.valor)}</td><td><button class="delete-btn" onclick="window.app.deleteFixedExpense('${f.id}')">${TRASH_ICON}</button></td></tr>`).join('');
-        }
-        if (this.els.goalsList) {
-            this.els.goalsList.innerHTML = this.goals.map(g => `<div class="goal"><p>${g.name}</p><progress value="${g.current}" max="${g.target}"></progress></div>`).join('');
+            this.els.fixedIncomeList.innerHTML = this.fixedExpenses.filter(f => f.tipo === 'income').map(f => `
+            <div class="fixed-card recipe-border">
+                <div class="fixed-date-box">${f.dia_vencimento}</div>
+                <div class="fixed-info">
+                    <span class="fixed-title">${f.descricao}</span>
+                    <span class="fixed-cat">${this.getCategoryIcon(f.categoria)} ${f.categoria}</span>
+                </div>
+                <div class="fixed-value text-green">${this.formatCurrency(f.valor)}</div>
+                <div class="fixed-actions">
+                    <button class="delete-btn" onclick="window.app.deleteFixedExpense('${f.id}')" title="Excluir">
+                        ${TRASH_ICON}
+                    </button>
+                </div>
+            </div>`).join('');
         }
     }
 
-    renderProjectionCharts(transactions) { /* ... Same ... */
+    // --- CATEGORY MANAGEMENT ---
+    async addCategory() {
+        const input = document.getElementById('newCategoryInput');
+        let name = input ? input.value : prompt('Nome da nova categoria:');
+
+        if (!name) return;
+        name = name.trim();
+
+        if (this.categories.includes(name)) {
+            return this.showToast('Categoria já existe!', 'warning');
+        }
+
+        this.categories.push(name);
+        if (input) input.value = '';
+        this.render();
+        this.saveCategories();
+        this.showToast('Categoria adicionada');
+    }
+
+    async deleteCategory(name) {
+        if (!confirm(`Excluir categoria "${name}"?`)) return;
+        this.categories = this.categories.filter(c => c !== name);
+        this.render();
+        this.saveCategories();
+        this.showToast('Categoria removida');
+    }
+
+    async saveCategories() {
+        if (this.config && this.config.id) {
+            const { error } = await this.supabase.from('configuracoes').update({ categories: this.categories }).eq('id', this.config.id);
+            if (error) console.warn('Could not save categories to DB:', error);
+        }
+    }
+
+    renderProjectionCharts(transactions) {
+        // --- 1. Daily Cash Flow (Bar Chart) ---
         if (this.els.projChart) {
             const ctx = this.els.projChart.getContext('2d');
             if (this.projChartInstance) this.projChartInstance.destroy();
-            const sorted = [...transactions].filter(t => !t.card_id).sort((a, b) => new Date(a.data) - new Date(b.data));
-            if (sorted.length === 0) {
-                this.projChartInstance = new Chart(ctx, { type: 'line', data: { labels: ['Sem dados'], datasets: [{ label: 'Saldo', data: [0] }] } });
-            } else {
-                let acc = this.config.saldo_inicial || 0;
-                const labels = sorted.map(t => this.formatDate(t.data));
-                const data = sorted.map(t => { const v = t.tipo === 'income' ? t.valor : -t.valor; acc += v; return acc; });
-                this.projChartInstance = new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [{ label: 'Evolução do Saldo', data: data, borderColor: '#3b82f6', tension: 0.4, fill: true }] }, options: { responsive: true, maintainAspectRatio: false } });
-            }
+
+            // Prepare Data: Days 1-31
+            const daysInMonth = 31;
+            const labels = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+            const incomeData = new Array(daysInMonth).fill(0);
+            const expenseData = new Array(daysInMonth).fill(0);
+
+            transactions.forEach(t => {
+                if (t.efetivado === false) return;
+                const day = parseInt(t.data.split('-')[2]);
+                if (day >= 1 && day <= daysInMonth) {
+                    if (t.tipo === 'income') incomeData[day - 1] += t.valor;
+                    else if (t.tipo === 'expense') expenseData[day - 1] += t.valor;
+                }
+            });
+
+            this.projChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Receitas',
+                            data: incomeData,
+                            backgroundColor: '#10b981',
+                            borderRadius: 4,
+                            barPercentage: 0.6,
+                            categoryPercentage: 0.8
+                        },
+                        {
+                            label: 'Despesas',
+                            data: expenseData,
+                            backgroundColor: '#ef4444',
+                            borderRadius: 4,
+                            barPercentage: 0.6,
+                            categoryPercentage: 0.8
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#fff' } } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
+                        y: { grid: { display: false }, ticks: { color: '#9ca3af' } }
+                    }
+                }
+            });
         }
+
+        // --- 2. Categories (Doughnut) ---
         if (this.els.catChart) {
             const ctx = this.els.catChart.getContext('2d');
             if (this.catChartInstance) this.catChartInstance.destroy();
+
             const expenses = transactions.filter(t => t.tipo === 'expense');
+
             if (expenses.length === 0) {
-                this.catChartInstance = new Chart(ctx, { type: 'doughnut', data: { labels: ['Sem despesas'], datasets: [{ data: [1], backgroundColor: ['#e5e7eb'] }] } });
+                this.catChartInstance = new Chart(ctx, { type: 'doughnut', data: { labels: ['Sem dados'], datasets: [{ data: [1], backgroundColor: ['#374151'] }] }, options: { cutout: '70%', plugins: { legend: { display: false } } } });
             } else {
-                const map = {}; expenses.forEach(t => { map[t.categoria] = (map[t.categoria] || 0) + t.valor; });
-                const labels = Object.keys(map); const data = Object.values(map);
-                const colors = ['#ef4444', '#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#ec4899', '#6366f1'];
-                this.catChartInstance = new Chart(ctx, { type: 'doughnut', data: { labels: labels, datasets: [{ data: data, backgroundColor: colors.slice(0, labels.length) }] }, options: { responsive: true, maintainAspectRatio: false } });
+                const map = {};
+                expenses.forEach(t => { map[t.categoria] = (map[t.categoria] || 0) + t.valor; });
+                const labels = Object.keys(map);
+                const data = Object.values(map);
+                const colors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#06b6d4'];
+
+                this.catChartInstance = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: data,
+                            backgroundColor: colors.slice(0, labels.length),
+                            borderWidth: 0,
+                            hoverOffset: 10
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '70%',
+                        plugins: {
+                            legend: {
+                                position: 'right',
+                                labels: { color: '#e5e7eb', usePointStyle: true, padding: 20, font: { size: 12 } }
+                            }
+                        }
+                    }
+                });
             }
         }
     }
 
-    setText(el, text) { if (el) el.innerText = text; }
+    setText(el, text) {
+        if (!el) return;
+        if (text && text.includes('R$') && !isNaN(parseFloat(text.replace(/[^\d,]/g, '').replace(',', '.')))) {
+            const endVal = parseFloat(text.replace(/[^\d,]/g, '').replace(',', '.'));
+            const currentStr = el.innerText;
+            const startVal = currentStr && currentStr.includes('R$') ? parseFloat(currentStr.replace(/[^\d,]/g, '').replace(',', '.')) : 0;
+            if (startVal !== endVal) {
+                this.animateValue(el, startVal, endVal, 1500);
+            } else {
+                el.innerText = text;
+            }
+        } else {
+            el.innerText = text;
+        }
+    }
 
-    // --- UPDATED CARD DETAILS WITH SHARED EXPENSE LOGIC ---
+    animateValue(obj, start, end, duration) {
+        let startTimestamp = null;
+        const step = (timestamp) => {
+            if (!startTimestamp) startTimestamp = timestamp;
+            const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+            const ease = 1 - Math.pow(1 - progress, 4);
+            const val = start + (end - start) * ease;
+            obj.innerText = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+            if (progress < 1) {
+                window.requestAnimationFrame(step);
+            } else {
+                obj.innerText = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(end);
+            }
+        };
+        window.requestAnimationFrame(step);
+    }
+
     openCardDetails(id) {
         this.currentCardId = id; const c = this.cards.find(x => x.id === id); if (!c || !this.els.cardDetailsModal) return;
         this.els.cardDetailsModal.classList.add('active'); this.setText(this.els.detailCardName, c.name);
-        const [y, m] = this.els.monthYear ? this.els.monthYear.value.split('-') : this.getCurrentMonthStr().split('-');
-        const prevClosing = new Date(y, m - 1, c.closing_day), closing = new Date(y, m, c.closing_day);
-        const start = new Date(prevClosing); start.setDate(start.getDate() + 1);
 
-        const txs = this.transactions.filter(t => t.card_id === id && new Date(t.data) >= start && new Date(t.data) <= closing);
+        const [y, mStr] = this.els.monthYear ? this.els.monthYear.value.split('-') : this.getCurrentMonthStr().split('-');
+        const yNum = parseInt(y), mNum = parseInt(mStr);
+        const closingDay = parseInt(c.closing_day) || 10;
+        const closingDate = new Date(yNum, mNum - 1, closingDay);
+        closingDate.setHours(23, 59, 59, 999);
+        const startDate = new Date(yNum, mNum - 2, closingDay);
+        startDate.setDate(startDate.getDate() + 1);
+        startDate.setHours(0, 0, 0, 0);
+
+        const txs = this.transactions.filter(t => {
+            if (t.card_id !== id) return false;
+            const [ty, tm, td] = t.data.split('-').map(Number);
+            const tDate = new Date(ty, tm - 1, td);
+            tDate.setHours(12, 0, 0, 0);
+            return tDate >= startDate && tDate <= closingDate;
+        });
+
         const calcTxs = txs.filter(t => t.efetivado !== false);
         const total = calcTxs.reduce((s, t) => s + t.valor, 0);
 
         this.setText(this.els.detailCardInvoice, this.formatCurrency(total));
         this.setText(this.els.detailCardLimit, this.formatCurrency(c.limit - total));
-        this.setText(this.els.detailCardPeriod, `${this.formatDate(start.toISOString().split('T')[0])} a ${this.formatDate(closing.toISOString().split('T')[0])}`);
 
-        if (this.els.cardTransBody) {
-            this.els.cardTransBody.innerHTML = txs.map(t => {
+        const startStr = `${startDate.getDate()}/${startDate.getMonth() + 1}`;
+        const endStr = `${closingDate.getDate()}/${closingDate.getMonth() + 1}`;
+        this.setText(this.els.detailCardPeriod, `${startStr} a ${endStr}`);
+
+        if (this.els.cardTransList) {
+            this.els.cardTransList.innerHTML = txs.map(t => {
                 const isPending = t.efetivado === false;
-                const rowClass = isPending ? 'invoice-row pending-row' : 'invoice-row';
+                const statusClass = isPending ? 'pending' : 'approved';
                 const statusIcon = isPending ?
-                    `<button class="btn-icon approve-btn" onclick="window.app.approveTransaction('${t.id}')" title="Aprovar Despesa"><i class="fa-solid fa-check"></i></button>` :
-                    `<i class="fa-solid fa-check-circle text-green" title="Aprovado" style="margin-right:8px; opacity:0.5;"></i>`;
-
+                    `<button class="action-btn check-btn" onclick="window.app.approveTransaction('${t.id}')" title="Aprovar"><i class="fa-solid fa-check"></i></button>` :
+                    `<i class="fa-solid fa-check-circle text-neon-green" title="Aprovado"></i>`;
+                const [y, m, d] = t.data.split('-');
+                const dayStr = `${d}/${m}`;
                 return `
-                <tr class="${rowClass}">
-                    <td>${this.formatDate(t.data)}</td>
-                    <td style="text-transform: capitalize;">${t.descricao}</td>
-                    <td style="text-align: right;">${this.formatCurrency(t.valor)}</td>
-                    <td style="text-align: center; white-space: nowrap;">
+                <div class="transaction-card ${statusClass}">
+                    <div class="trans-info">
+                        <div class="trans-desc">${t.descricao}</div>
+                        <div class="trans-date">${dayStr}</div>
+                    </div>
+                    <div class="trans-value">${this.formatCurrency(t.valor)}</div>
+                    <div class="trans-actions">
                         ${statusIcon}
-                        <button class="delete-btn" onclick="window.app.deleteTransaction('${t.id}')" title="Excluir">
+                        <button class="action-btn delete-btn" onclick="window.app.deleteTransaction('${t.id}')">
                             ${TRASH_ICON}
                         </button>
-                    </td>
-                </tr>`;
+                    </div>
+                </div>`;
             }).join('');
         }
+
+        const percentage = c.limit > 0 ? Math.min((total / c.limit) * 100, 100) : 100;
+        let progressBar = document.getElementById('limitProgressBar');
+        if (!progressBar) {
+            const limitEl = document.getElementById('detailCardLimit');
+            if (limitEl && limitEl.parentNode && !limitEl.parentNode.querySelector('.limit-progress-bg')) {
+                const bar = document.createElement('div');
+                bar.className = 'limit-progress-bg';
+                bar.innerHTML = `<div class="limit-progress-fill" id="limitProgressBar" style="width: 0%"></div>`;
+                limitEl.parentNode.appendChild(bar);
+                progressBar = document.getElementById('limitProgressBar');
+            }
+        }
+        if (progressBar) progressBar.style.width = `${percentage}%`;
     }
 
     formatCurrency(v) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v); }
@@ -657,7 +999,7 @@ class FinanceApp {
     success(msg) { this.showToast(msg, 'success'); this.closeAllModals(); this.render(); }
     error(msg) { this.showToast(msg, 'error'); }
     showToast(msg, type = 'info') { const t = document.createElement('div'); t.className = `toast toast-${type}`; t.innerText = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 3000); }
-    payInvoice() { /* Same */
+    payInvoice() {
         if (!confirm('Pagar Fatura?')) return;
         const amtStr = this.els.detailCardInvoice ? this.els.detailCardInvoice.innerText : '0';
         const val = parseFloat(amtStr.replace(/[^\d,]/g, '').replace(',', '.'));
@@ -670,4 +1012,3 @@ class FinanceApp {
     }
 }
 window.app = new FinanceApp();
-

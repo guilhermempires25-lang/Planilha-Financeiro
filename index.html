@@ -9,6 +9,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -207,71 +209,61 @@
                 </div>
                 <!-- Controls for Fixed Expenses -->
                 <div class="fixed-expenses-controls"
-                    style="margin-bottom: 1rem; padding: 1rem; background: var(--bg-secondary); border-radius: var(--radius-md);">
-                    <p style="margin-bottom: 0; font-size: 0.9rem; color: var(--text-secondary);">
-                        <i class="fa-solid fa-circle-info"></i> As despesas fixas cadastradas agora aparecem
-                        automaticamente no Resumo de todos os meses.
+                    style="margin-bottom: 2rem; background: var(--bg-secondary); padding: 1.5rem; border-radius: 16px; border: 1px solid var(--border-color);">
+                    <p
+                        style="margin-bottom: 1rem; font-size: 0.95rem; color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-circle-info text-blue"></i>
+                        As despesas fixas cadastradas aparecem automaticamente no Resumo Mensal.
                     </p>
-                    <button class="btn btn-outline" onclick="window.app.generateFixedForMonth()"
-                        style="margin-top: 10px; width: 100%;">
-                        <i class="fa-solid fa-calendar-check"></i> Gerar no Mês Atual
+                    <button id="btn-generate-fixed" onclick="window.app.generateFixedForMonth()">
+                        <i class="fa-solid fa-bolt"></i> Gerar no Mês Atual
                     </button>
                 </div>
-                <div class="table-container" style="margin-bottom: 2rem;">
-                    <h3 style="margin-bottom: 1rem; color: var(--green-color);"><i class="fa-solid fa-arrow-up"></i>
-                        Receitas Fixas</h3>
-                    <table class="transactions-table">
-                        <thead>
-                            <tr>
-                                <th>Dia Venc.</th>
-                                <th>Descrição</th>
-                                <th>Categoria</th>
-                                <th>Valor (R$)</th>
-                                <th>Ação</th>
-                            </tr>
-                        </thead>
-                        <tbody id="fixedIncomeBody">
-                            <!-- Fixed Income -->
-                        </tbody>
-                    </table>
+
+                <div class="fixed-section" style="margin-bottom: 2rem;">
+                    <h3
+                        style="margin-bottom: 1rem; color: var(--green-color); display: flex; align-items: center; gap: 10px;">
+                        <i class="fa-solid fa-arrow-up"></i> Receitas Fixas
+                    </h3>
+                    <div id="fixedIncomeBody" class="fixed-grid">
+                        <!-- Fixed Income Cards -->
+                    </div>
                 </div>
 
-                <div class="table-container">
-                    <h3 style="margin-bottom: 1rem; color: var(--red-color);"><i class="fa-solid fa-arrow-down"></i>
-                        Despesas Fixas</h3>
-                    <table class="transactions-table">
-                        <thead>
-                            <tr>
-                                <th>Dia Venc.</th>
-                                <th>Descrição</th>
-                                <th>Categoria</th>
-                                <th>Valor (R$)</th>
-                                <th>Ação</th>
-                            </tr>
-                        </thead>
-                        <tbody id="fixedExpensesBody">
-                            <!-- Fixed Expenses -->
-                        </tbody>
-                    </table>
+                <div class="fixed-section">
+                    <h3
+                        style="margin-bottom: 1rem; color: var(--red-color); display: flex; align-items: center; gap: 10px;">
+                        <i class="fa-solid fa-arrow-down"></i> Despesas Fixas
+                    </h3>
+                    <div id="fixedExpensesBody" class="fixed-grid">
+                        <!-- Fixed Expenses Cards -->
+                    </div>
                 </div>
             </div>
 
             <!-- PROJEÇÃO TAB -->
+            <!-- PROJEÇÃO TAB (Charts) -->
             <div id="view-projection" class="tab-content">
                 <div class="section-header">
-                    <h2><i class="fa-solid fa-chart-line"></i> Projeção Financeira</h2>
-                </div>
-                <div class="chart-container" style="position: relative; height: 400px; width: 100%;">
-                    <canvas id="projectionChart"></canvas>
+                    <h2><i class="fa-solid fa-chart-pie"></i> Análise Gráfica</h2>
                 </div>
 
-                <div class="section-header" style="margin-top: 2rem;">
-                    <h2><i class="fa-solid fa-chart-pie"></i> Gastos por Categoria</h2>
+                <div class="charts-section">
+                    <div class="chart-card">
+                        <h3 class="chart-title">Fluxo de Caixa Diário</h3>
+                        <div class="chart-container-inner" style="position: relative; height: 300px; width: 100%;">
+                            <canvas id="projectionChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <h3 class="chart-title">Gastos por Categoria</h3>
+                        <div class="chart-container-inner" style="position: relative; height: 300px; width: 100%;">
+                            <canvas id="categoryChart"></canvas>
+                        </div>
+                    </div>
                 </div>
-                <div class="chart-container" style="position: relative; height: 350px; width: 100%;">
-                    <canvas id="categoryChart"></canvas>
-                </div>
-                <!-- Forecast Element -->
+
                 <div id="forecastDisplay"></div>
             </div>
 
@@ -562,20 +554,9 @@
                     </div>
                 </div>
 
-                <div class="table-container" style="max-height: 300px; overflow-y: auto;">
-                    <table class="transactions-table">
-                        <thead>
-                            <tr>
-                                <th>Data</th>
-                                <th>Descrição</th>
-                                <th>Valor</th>
-                                <th>Ação</th>
-                            </tr>
-                        </thead>
-                        <tbody id="cardTransactionsBody">
-                            <!-- Card Transactions -->
-                        </tbody>
-                    </table>
+                <div class="transactions-list-container" id="cardTransactionsList"
+                    style="max-height: 300px; overflow-y: auto; padding: 0.5rem;">
+                    <!-- Card Transactions (Divs) -->
                 </div>
 
                 <div class="form-actions" style="justify-content: space-between; margin-top: 1.5rem;">
