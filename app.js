@@ -670,3 +670,4 @@ class FinanceApp {
     }
 }
 window.app = new FinanceApp();
+
