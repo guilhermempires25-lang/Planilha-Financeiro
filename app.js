@@ -19,8 +19,10 @@ class FinanceApp {
         this.categories = ['Salário', 'Investimentos', 'Alimentação', 'Moradia', 'Transporte', 'Lazer', 'Saúde', 'Outros'];
         this.fixedExpenses = [];
         this.goals = [];
+        this.receivables = []; // New: Valores a Receber
         this.cards = [];
         this.config = { id: null, saldo_inicial: 0 };
+
 
         this.currentCardId = null;
         this.mainChartInstance = null;
@@ -89,10 +91,14 @@ class FinanceApp {
             goalModal: document.getElementById('goalModal'),
             cardModal: document.getElementById('cardModal'),
             cardDetailsModal: document.getElementById('cardDetailsModal'),
-            instModal: document.getElementById('installmentsModal'),
+            recModal: document.getElementById('receivablesModal'), // New Modal
 
             transForm: document.getElementById('transactionForm'),
             fixedForm: document.getElementById('fixedForm'),
+            goalForm: document.getElementById('goalForm'),
+            cardForm: document.getElementById('cardForm'),
+            recForm: document.getElementById('addReceivableForm'),
+
             goalForm: document.getElementById('goalForm'),
             cardForm: document.getElementById('cardForm'),
 
@@ -119,9 +125,10 @@ class FinanceApp {
         if (this.els.fixedForm) this.els.fixedForm.addEventListener('submit', (e) => this.handleFixedSubmit(e));
         if (this.els.goalForm) this.els.goalForm.addEventListener('submit', (e) => this.handleGoalSubmit(e));
         if (this.els.cardForm) this.els.cardForm.addEventListener('submit', (e) => this.handleCardSubmit(e));
+        if (this.els.recForm) this.els.recForm.addEventListener('submit', (e) => this.handleAddReceivable(e));
 
         window.onclick = (event) => {
-            const modals = [this.els.transModal, this.els.fixedModal, this.els.goalModal, this.els.cardModal, this.els.cardDetailsModal, this.els.instModal];
+            const modals = [this.els.transModal, this.els.fixedModal, this.els.goalModal, this.els.cardModal, this.els.cardDetailsModal, this.els.recModal];
             if (modals.includes(event.target)) this.closeAllModals();
         };
 
@@ -1218,6 +1225,128 @@ class FinanceApp {
         const h = this.categories.map(c => `<option value="${c}">${c}</option>`).join('');
         [document.getElementById('transCategory'), document.getElementById('fixedCategory')].forEach(el => { if (el) el.innerHTML = h; });
     }
+    // --- RECEIVABLES LOGIC ---
+    openReceivablesModal() {
+        if (this.els.recModal) this.els.recModal.classList.add('active');
+        this.renderReceivables();
+    }
+
+    closeReceivablesModal() {
+        if (this.els.recModal) this.els.recModal.classList.remove('active');
+    }
+
+    async handleAddReceivable(e) {
+        e.preventDefault();
+        const getVal = (id) => document.getElementById(id).value;
+
+        const devedor = getVal('recName');
+        const descBase = getVal('recDesc');
+        const totalVal = parseFloat(getVal('recValue'));
+        const dateStr = getVal('recDate');
+        let installments = parseInt(getVal('recInstallments')) || 1;
+
+        if (installments < 1) installments = 1;
+
+        const valPerInst = totalVal / installments;
+        const baseDate = new Date(dateStr);
+        const newRecs = [];
+
+        // Generate N entries
+        for (let i = 0; i < installments; i++) {
+            const d = new Date(baseDate);
+            d.setMonth(d.getMonth() + i); // Add month for subsequent installments
+
+            const finalDesc = installments > 1 ? `${descBase} (${i + 1}/${installments})` : descBase;
+
+            newRecs.push({
+                id: crypto.randomUUID(),
+                devedor: devedor,
+                descricao: finalDesc,
+                valor: valPerInst,
+                data_prevista: d.toISOString().split('T')[0],
+                pago: false
+            });
+        }
+
+        const { data, error } = await this.supabase.from('valores_a_receber').insert(newRecs).select();
+        if (!error) {
+            this.receivables.push(...data);
+            this.success(installments > 1 ? `${installments} Cobranças Geradas!` : 'Cobrança Adicionada');
+            this.renderReceivables();
+            e.target.reset();
+            // Reset installments to 1
+            if (document.getElementById('recInstallments')) document.getElementById('recInstallments').value = 1;
+        } else {
+            this.error(error.message);
+        }
+    }
+
+    renderReceivables() {
+        if (!this.els.recModal || !this.els.recModal.querySelector('#receivablesList')) return;
+        const container = this.els.recModal.querySelector('#receivablesList');
+
+        if (this.receivables.length === 0) {
+            container.innerHTML = '<div class="empty-state">Ninguém te deve nada! 🎉</div>';
+            return;
+        }
+
+        container.innerHTML = this.receivables.map(r => {
+            const initial = r.devedor.charAt(0).toUpperCase();
+            const dateStr = this.formatDate(r.data_prevista);
+            return `
+            <div class="receivable-card">
+                <div class="avatar-circle">${initial}</div>
+                <div class="receivable-info">
+                    <strong>${r.devedor}</strong>
+                    <span>${r.descricao} • ${dateStr}</span>
+                </div>
+                <div class="receivable-actions">
+                    <div class="debt-value">${this.formatCurrency(r.valor)}</div>
+                    <button class="btn-receive" onclick="window.app.confirmReceive('${r.id}')" title="Confirmar Recebimento">
+                        <i class="fa-solid fa-check"></i>
+                    </button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    async confirmReceive(id) {
+        const item = this.receivables.find(x => x.id === id);
+        if (!item) return;
+
+        if (confirm(`Confirmar recebimento de ${this.formatCurrency(item.valor)} de ${item.devedor}?`)) {
+            // 1. Create Income
+            const { error: transError } = await this.supabase.from('transacoes').insert([{
+                descricao: `Recebido de ${item.devedor} (${item.descricao})`,
+                valor: item.valor,
+                tipo: 'income',
+                data: new Date().toISOString().split('T')[0],
+                categoria: 'Outros',
+                efetivado: true
+            }]);
+
+            if (transError) {
+                this.error('Erro ao criar receita: ' + transError.message);
+                return;
+            }
+
+            // 2. Mark as Paid (Delete or Update) -> Using Update for history could be better, but user said "remove".
+            // Let's Update to paid=true so it vanishes from list (filtered in loadData)
+            const { error: updateError } = await this.supabase.from('valores_a_receber')
+                .update({ pago: true })
+                .eq('id', id);
+
+            if (!updateError) {
+                this.receivables = this.receivables.filter(x => x.id !== id);
+                this.success(`Recebido R$ ${item.valor}!`);
+                this.renderReceivables();
+                this.render(); // Update balance
+            } else {
+                this.error(updateError.message);
+            }
+        }
+    }
+
     switchTab(btn) {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
