@@ -327,7 +327,7 @@ class FinanceApp {
             const valPart = parseFloat((val / inst).toFixed(2));
             for (let i = 0; i < inst; i++) {
                 const cur = new Date(d); cur.setMonth(d.getMonth() + i);
-                batch.push({ ...base, data: cur.toISOString().split('T')[0], descricao: `${desc} (${i + 1}/${inst})`, valor: valPart, installment_current: i + 1, installment_total: inst });
+                batch.push({ ...base, data: cur.toISOString().split('T')[0], descricao: desc, valor: valPart, installment_current: i + 1, installment_total: inst });
             }
             const { data, error } = await this.supabase.from('transacoes').insert(batch).select();
             if (!error) { this.transactions.push(...data); this.success('Parcelamento Salvo'); } else this.error(error.message);
