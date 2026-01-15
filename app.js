@@ -294,11 +294,24 @@ class FinanceApp {
     async handleTransactionSubmit(e) {
         e.preventDefault();
         const getVal = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
-        const date = getVal('transDate'), desc = getVal('transDesc'), val = parseFloat(getVal('transValue')), cat = getVal('transCategory');
-        let type = 'expense'; const tEl = document.querySelector('input[name="transType"]:checked'); if (tEl) type = tEl.value;
-        const inst = parseInt(getVal('transInstallments')) || 1, tags = getVal('transTags');
+
+        // UPDATED: Read 'transAmount' (Giant Input) instead of 'transValue'
+        const date = getVal('transDate');
+        const desc = getVal('transDesc');
+        const val = parseFloat(getVal('transAmount'));
+        const cat = getVal('transCategory');
+
+        // UPDATED: Read Type from Hidden Input
+        let type = 'expense';
+        const tEl = document.getElementById('transType');
+        if (tEl) type = tEl.value;
+
+        const inst = parseInt(getVal('transInstallments')) || 1;
+        const tags = getVal('transTags');
 
         const base = { data: date, descricao: desc, valor: val, categoria: cat, tipo: type, tag: tags, card_id: this.currentCardId, efetivado: true };
+
+        // Remove undefined keys
         Object.keys(base).forEach(k => base[k] === undefined && delete base[k]);
 
         if (inst > 1 && type === 'expense') {
@@ -314,6 +327,22 @@ class FinanceApp {
         } else {
             const { data, error } = await this.supabase.from('transacoes').insert([base]).select();
             if (!error) { this.transactions.push(data[0]); this.success('Salvo'); } else this.error(error.message);
+        }
+    }
+
+    setTransType(type) {
+        const btnInc = document.getElementById('btnTypeIncome');
+        const btnExp = document.getElementById('btnTypeExpense');
+        const hidden = document.getElementById('transType');
+
+        if (hidden) hidden.value = type;
+
+        if (type === 'income') {
+            if (btnInc) btnInc.classList.add('active');
+            if (btnExp) btnExp.classList.remove('active');
+        } else {
+            if (btnInc) btnInc.classList.remove('active');
+            if (btnExp) btnExp.classList.add('active');
         }
     }
 
@@ -425,7 +454,13 @@ class FinanceApp {
     async handleGoalSubmit(e) {
         e.preventDefault();
         const getVal = (id) => document.getElementById(id) ? document.getElementById(id).value : '';
-        const g = { name: getVal('goalName'), target: parseFloat(getVal('goalTarget')) || 0, current: parseFloat(getVal('goalCurrent')) || 0, color: getVal('goalColor') || '#000000' };
+        const g = {
+            id: crypto.randomUUID(), // FIX: Generate ID manually as DB expects it
+            name: getVal('goalName'),
+            target: parseFloat(getVal('goalTarget')) || 0,
+            current: parseFloat(getVal('goalCurrent')) || 0,
+            color: getVal('goalColor') || '#000000'
+        };
         const { data, error } = await this.supabase.from('metas').insert([g]).select();
         if (!error) { this.goals.push(data[0]); this.success('Meta Criada'); } else this.error(error.message);
     }
@@ -503,8 +538,100 @@ class FinanceApp {
     }
 
     renderGoals() {
-        if (this.els.goalsList) {
-            this.els.goalsList.innerHTML = this.goals.map(g => `<div class="goal"><p>${g.name}</p><progress value="${g.current}" max="${g.target}"></progress></div>`).join('');
+        if (!this.els.goalsList) return;
+
+        if (this.goals.length === 0) {
+            this.els.goalsList.innerHTML = `
+                <div class="trans-empty-state">
+                    <div class="empty-icon"><i class="fa-solid fa-bullseye"></i></div>
+                    <div class="empty-text">Nenhuma meta definida.</div>
+                    <div class="empty-subtext">Clique em + Nova Meta para começar a economizar.</div>
+                </div>`;
+            return;
+        }
+
+        const html = this.goals.map(g => {
+            const current = parseFloat(g.current) || 0;
+            const target = parseFloat(g.target) || 1; // Avoid div by zero
+            let pct = (current / target) * 100;
+            const displayPct = Math.round(pct);
+
+            // Visual Limit at 100%
+            const visualPct = Math.min(pct, 100);
+
+            // Success State
+            let isSuccess = pct >= 100;
+            let barColor = g.color || '#3b82f6';
+            let icon = '🎯';
+
+            if (isSuccess) {
+                barColor = '#10b981'; // Success Green
+                icon = '🏆';
+            }
+
+            return `
+            <div class="goal-card">
+                <div class="goal-header">
+                    <div class="goal-icon" style="color: ${barColor}">${icon}</div>
+                    <div class="goal-title">${g.name}</div>
+                </div>
+
+                <div class="goal-actions">
+                    <button class="goal-btn" onclick="window.app.editGoal('${g.id}')" title="Editar">
+                        <i class="fa-solid fa-pencil"></i>
+                    </button>
+                    <button class="goal-btn delete" onclick="window.app.deleteGoal('${g.id}')" title="Excluir">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </div>
+
+                <div class="goal-center">
+                    <div class="goal-percentage" style="color: ${barColor}">${displayPct}%</div>
+                    <div class="goal-progress-bg">
+                        <div class="goal-progress-fill" style="width: ${visualPct}%; background-color: ${barColor}"></div>
+                    </div>
+                </div>
+
+                <div class="goal-footer">
+                    <span>${this.formatCurrency(current)}</span>
+                    <span>${this.formatCurrency(target)}</span>
+                </div>
+            </div>`;
+        }).join('');
+
+        this.els.goalsList.innerHTML = `<div class="goals-grid">${html}</div>`;
+    }
+
+    // Stub for edit to prevent error
+    editGoal(id) {
+        // Simple prompt fallback if modal logic isn't ready for edits
+        const g = this.goals.find(x => x.id === id);
+        if (!g) return;
+        const newVal = prompt(`Atualizar valor atual para ${g.name}:`, g.current);
+        if (newVal !== null) {
+            const val = parseFloat(newVal);
+            if (!isNaN(val)) {
+                // Direct update simulation
+                this.supabase.from('metas').update({ current: val }).eq('id', id).then(({ error }) => {
+                    if (!error) {
+                        g.current = val;
+                        this.renderGoals();
+                        this.showToast('Meta atualizada!');
+                    }
+                });
+            }
+        }
+    }
+
+    async deleteGoal(id) {
+        if (!confirm('Excluir esta meta?')) return;
+        const { error } = await this.supabase.from('metas').delete().eq('id', id);
+        if (!error) {
+            this.goals = this.goals.filter(g => g.id !== id);
+            this.renderGoals();
+            this.showToast('Meta excluída');
+        } else {
+            this.error(error.message);
         }
     }
 
@@ -513,9 +640,14 @@ class FinanceApp {
         let inc = 0;
         let exp = 0;
         monthTrans.forEach(t => {
-            const val = parseFloat(t.valor) || 0;
-            if (t.tipo === 'income') inc += val;
-            else if (t.tipo === 'expense' && t.efetivado !== false) exp += val;
+            // FORCE POSITIVE VALUES to ensure logic (Income - Expense) works regardless of DB sign
+            const val = Math.abs(parseFloat(t.valor) || 0);
+
+            if (t.tipo === 'income') {
+                inc += val;
+            } else if (t.tipo === 'expense' && t.efetivado !== false) {
+                exp += val;
+            }
         });
         return { inc, exp };
     }
@@ -588,43 +720,45 @@ class FinanceApp {
                 if (existingEmpty) existingEmpty.style.display = 'none';
 
                 this.els.transList.innerHTML = monthTrans.map(t => {
-                    const badgeClass = t.tipo === 'income' ? 'income' : 'expense';
-                    const badgeText = t.tipo === 'income' ? 'Receita' : 'Despesa';
-                    const sign = t.tipo === 'income' ? '+' : '-';
-                    const colorClass = t.tipo === 'income' ? 'text-green' : 'text-red';
-
-                    // Meta info for Description column
-                    let descText = `<span class="trans-desc">${t.descricao}</span>`;
-                    if (t.installment_total) descText += ` <span class="trans-meta">(${t.installment_current}/${t.installment_total})</span>`;
-                    if (t.card_id) descText += ` <span class="trans-meta"><i class="fa-regular fa-credit-card"></i></span>`;
+                    const metaDesc = t.card_id ? ' <i class="fa-regular fa-credit-card text-blue-400"></i>' : (t.installment_total ? ` (${t.installment_current}/${t.installment_total})` : '');
 
                     return `
                     <tr>
-                        <!-- Col 1: Data -->
-                        <td><span style="color:#9ca3af">${this.formatDate(t.data)}</span></td>
-                        
-                        <!-- Col 2: Descrição -->
-                        <td>${descText}</td>
-                        
-                        <!-- Col 3: Categoria -->
-                        <td>
-                            <div class="cat-cell">
-                                <div class="cat-circle">${this.getCategoryIcon(t.categoria)}</div>
-                                <span>${t.categoria}</span>
+                        <!-- Col 1: DATE -->
+                        <td class="py-4 font-bold text-gray-400">
+                             ${this.formatDate(t.data)}
+                        </td>
+
+                        <!-- Col 2: DESCRIPTION -->
+                        <td class="py-4 font-bold text-white">
+                            ${t.descricao} ${metaDesc}
+                        </td>
+
+                        <!-- Col 3: CATEGORY -->
+                        <td class="py-4">
+                            <div class="flex items-center gap-2" style="display:flex; align-items:center; gap:0.5rem">
+                                <div class="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-lg" style="width:32px; height:32px; background:#374151; border-radius:50%; display:flex; align-items:center; justify-content:center;">
+                                    ${this.getCategoryIcon(t.categoria)}
+                                </div>
+                                <span class="text-gray-300">${t.categoria}</span>
                             </div>
                         </td>
 
-                        <!-- Col 4: Tipo (Badge) -->
-                        <td><span class="status-badge ${badgeClass}">${badgeText}</span></td>
-                        
-                        <!-- Col 5: Valor -->
-                        <td class="${t.tipo === 'income' ? 'text-emerald-400' : 'text-red-400'} trans-val-lg">
-                            ${sign} ${this.formatCurrency(t.valor)}
+                        <!-- Col 4: TYPE -->
+                        <td class="py-4">
+                            <span class="${t.tipo === 'income' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'} px-2 py-1 rounded text-xs font-bold uppercase" style="padding:4px 8px; border-radius:12px; font-size:0.75rem; background:${t.tipo === 'income' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)'}; color:${t.tipo === 'income' ? '#34d399' : '#f87171'}">
+                                ${t.tipo === 'income' ? 'Receita' : 'Despesa'}
+                            </span>
                         </td>
 
-                        <!-- Col 6: Ação -->
-                        <td style="text-align: right;">
-                            <button class="btn-icon delete-btn" onclick="window.app.deleteTransaction('${t.id}')">
+                        <!-- Col 5: VALUE -->
+                        <td class="py-4 font-bold text-lg ${t.type === 'income' ? 'text-emerald-400' : 'text-red-400'}" style="color:${t.tipo === 'income' ? '#34d399' : '#f87171'}; font-size:1.1rem; font-weight:bold;">
+                            ${t.tipo === 'expense' ? '-' : '+'} ${this.formatCurrency(t.valor)}
+                        </td>
+
+                        <!-- Col 6: ACTION -->
+                        <td class="py-4 text-center" style="text-align:center">
+                            <button onclick="window.app.deleteTransaction('${t.id}')" class="text-gray-500 hover:text-red-500 transition-colors p-2" style="border:none; background:none; cursor:pointer; color:#6b7280;">
                                 ${TRASH_ICON}
                             </button>
                         </td>
@@ -646,15 +780,42 @@ class FinanceApp {
             </div>`).join('');
         }
 
-        const { inc, exp } = this.calculateTotals(monthTrans);
+        // --- STRICT BALANCE CALCULATION ---
+        let totalIncome = 0;
+        let totalExpense = 0;
+
+        monthTrans.forEach(t => {
+            const val = Math.abs(parseFloat(t.valor) || 0); // Force positive magnitude
+            if (t.tipo === 'income') {
+                totalIncome += val;
+            } else if (t.tipo === 'expense' && t.efetivado !== false) {
+                totalExpense += val;
+            }
+        });
+
+        const totalBalance = totalIncome - totalExpense;
         const initBal = this.config.saldo_inicial || 0;
+        const finalBal = initBal + totalBalance;
 
-        this.setText(this.els.income, this.formatCurrency(inc));
-        this.setText(this.els.expense, this.formatCurrency(exp));
+        // Update Dashboard UI
+        this.setText(this.els.income, this.formatCurrency(totalIncome));
+        this.setText(this.els.expense, this.formatCurrency(totalExpense));
 
-        const bal = inc - exp;
-        this.setText(this.els.monthBalance, this.formatCurrency(bal));
-        this.setText(this.els.finalBalance, this.formatCurrency(initBal + bal));
+        // Format and Style Monthly Balance
+        this.setText(this.els.monthBalance, this.formatCurrency(totalBalance));
+        this.els.monthBalance.className = 'card-value'; // Reset
+        // Using 'text-red-400' and 'text-green-400' (or blue) to match theme, user asked red/blue/white.
+        // Assuming Tailwind/Bootstrap colors are available or defined in CSS.
+        // Using inline style for safety if classes aren't perfect, or standard internal classes.
+        if (totalBalance < 0) {
+            this.els.monthBalance.classList.add('text-red'); // Custom CSS class usually defined
+            this.els.monthBalance.style.color = '#ef4444';
+        } else {
+            this.els.monthBalance.classList.add('text-green');
+            this.els.monthBalance.style.color = '#10b981';
+        }
+
+        this.setText(this.els.finalBalance, this.formatCurrency(finalBal));
 
         this.renderProjectionCharts(monthTrans);
 
@@ -777,6 +938,72 @@ class FinanceApp {
             const { error } = await this.supabase.from('configuracoes').update({ categories: this.categories }).eq('id', this.config.id);
             if (error) console.warn('Could not save categories to DB:', error);
         }
+    }
+
+    renderHomeChart(transactions) {
+        if (!this.els.homeChart) return;
+
+        const ctx = this.els.homeChart.getContext('2d');
+        if (this.homeChartInstance) this.homeChartInstance.destroy();
+
+        // 1. Group by Day (1-31)
+        const daysInMonth = 31; // Simplification, could be dynamic
+        const labels = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+        const incomeData = new Array(daysInMonth).fill(0);
+        const expenseData = new Array(daysInMonth).fill(0);
+
+        transactions.forEach(t => {
+            if (t.efetivado === false) return;
+            // Extract day from YYYY-MM-DD
+            const day = parseInt(t.data.split('-')[2]);
+            if (day >= 1 && day <= daysInMonth) {
+                const val = Math.abs(parseFloat(t.valor) || 0);
+                if (t.tipo === 'income') incomeData[day - 1] += val;
+                else if (t.tipo === 'expense') expenseData[day - 1] += val;
+            }
+        });
+
+        // 2. Create Chart
+        this.homeChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Receitas',
+                        data: incomeData,
+                        backgroundColor: '#10b981', // Green
+                        borderRadius: 4,
+                        maxBarThickness: 10
+                    },
+                    {
+                        label: 'Despesas',
+                        data: expenseData,
+                        backgroundColor: '#ef4444', // Red
+                        borderRadius: 4,
+                        maxBarThickness: 10
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: '#fff' } },
+                    tooltip: { mode: 'index', intersect: false }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false, drawBorder: false }, // Clean look
+                        ticks: { color: '#9ca3af' }
+                    },
+                    y: {
+                        grid: { display: false, drawBorder: false }, // Clean look
+                        ticks: { display: false } // Minimalist
+                    }
+                }
+            }
+        });
     }
 
     renderProjectionCharts(transactions) {

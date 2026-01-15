@@ -1268,3 +1268,339 @@ body.dark-mode .transaction-card:hover {
 .fixed-card:hover .fixed-actions {
     opacity: 1;
 }
+
+/* --- MODERN MODAL STYLES (COMPACT) --- */
+.type-toggle-container {
+    display: flex;
+    gap: 0.75rem;
+    /* Reduced gap */
+    margin-bottom: 1rem;
+    /* Reduced from 2rem */
+}
+
+.type-btn {
+    flex: 1;
+    background: #374151;
+    color: #9ca3af;
+    border: 2px solid transparent;
+    padding: 0.75rem;
+    /* Reduced form 1rem */
+    border-radius: 12px;
+    font-size: 0.95rem;
+    /* Slightly smaller */
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.type-btn:hover {
+    background: #4b5563;
+}
+
+/* Active States */
+.type-btn.active#btnTypeIncome {
+    background: rgba(16, 185, 129, 0.1);
+    color: #34d399;
+    border-color: #34d399;
+    box-shadow: 0 0 10px rgba(52, 211, 153, 0.15);
+    /* Reduced shadow */
+}
+
+.type-btn.active#btnTypeExpense {
+    background: rgba(239, 68, 68, 0.1);
+    color: #f87171;
+    border-color: #f87171;
+    box-shadow: 0 0 10px rgba(248, 113, 113, 0.15);
+}
+
+/* Giant Input */
+.center-input {
+    text-align: center;
+    margin-bottom: 1rem;
+    /* Reduced from 2rem */
+}
+
+.giant-input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid #374151;
+    font-size: 2rem;
+    /* Reduced from 2.5rem */
+    font-weight: bold;
+    color: white;
+    text-align: center;
+    padding: 0.25rem;
+    /* Reduced padding */
+    outline: none;
+    transition: border-color 0.3s;
+}
+
+.giant-input:focus {
+    border-color: #60a5fa;
+}
+
+/* Grid Layout */
+.modal-grid-row {
+    display: flex;
+    gap: 0.75rem;
+    /* Reduced gap */
+    margin-bottom: 0.75rem;
+    /* Reduced from 1.5rem */
+}
+
+.modal-grid-row .form-group {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+/* Modern Inputs */
+.modal-input {
+    width: 100%;
+    background: #374151;
+    border: none;
+    border-radius: 10px;
+    /* Slightly tighter radius */
+    padding: 0.8rem 0.75rem;
+    /* Slightly more vertical padding */
+    color: white;
+    font-size: 0.95rem;
+    outline: none;
+    transition: background 0.3s;
+    /* Removed fixed height to prevent text clipping */
+    line-height: 1.5;
+}
+
+.modal-input:focus {
+    background: #4b5563;
+    box-shadow: 0 0 0 2px #60a5fa;
+}
+
+/* Button Refinements */
+.btn-save {
+    background: radial-gradient(circle at top left, #3b82f6, #2563eb);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    /* Reduced padding */
+    border-radius: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    width: 100%;
+    font-size: 1rem;
+    margin-top: 0.5rem;
+}
+
+.btn-ghost {
+    background: transparent;
+    color: #9ca3af;
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+.btn-ghost:hover {
+    color: white;
+    text-decoration: underline;
+}
+
+/* Labels */
+margin-bottom: 0.25rem;
+/* Tighter label spacing */
+}
+
+/* --- GOALS REDESIGN (FIXED) --- */
+.goals-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    padding: 1rem 0;
+}
+
+.goal-card {
+    background: #1f2937;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    position: relative;
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 220px;
+    /* Slight increase */
+    overflow: hidden;
+    /* Prevent spill */
+}
+
+.goal-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+}
+
+.goal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    /* Force separation */
+    margin-bottom: 1rem;
+    width: 100%;
+}
+
+.goal-icon {
+    font-size: 1.5rem;
+    width: 44px;
+    height: 44px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.goal-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: white;
+    text-align: right;
+    /* Match user pref or standard */
+    flex-grow: 1;
+    margin-left: 1rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.goal-actions {
+    position: absolute;
+    /* Floating actions */
+    top: 15px;
+    right: 15px;
+    /* Adjust if conflicts with title, but title is there too */
+    /* Wait, if title is right, actions overlap? Let's move title left or actions more subtle */
+    /* Actually better: Put title left next to icon, actions top right absolute */
+    display: flex;
+    gap: 8px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    background: rgba(31, 41, 55, 0.9);
+    /* backdrop */
+    padding: 4px;
+    border-radius: 8px;
+    z-index: 10;
+}
+
+.goal-card:hover .goal-actions {
+    opacity: 1;
+}
+
+/* Redefine Header if Actions are Absolute */
+.goal-header {
+    justify-content: flex-start;
+    /* Icon Title ... */
+}
+
+.goal-title {
+    text-align: left;
+    margin-right: 40px;
+    /* Space for actions */
+}
+
+.goal-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    margin: 1.5rem 0;
+    width: 100%;
+}
+
+.goal-percentage {
+    font-size: 3rem;
+    /* Bigger */
+    font-weight: 800;
+    color: white;
+    /* Will be overridden by card color inline */
+    margin-bottom: 0.75rem;
+    line-height: 1;
+}
+
+.goal-progress-bg {
+    width: 100%;
+    height: 14px;
+    /* Thicker */
+    background: #374151;
+    border-radius: 7px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.goal-progress-fill {
+    height: 100%;
+    border-radius: 7px;
+    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+}
+
+/* Shimmer Effect */
+.goal-progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transform: translateX(-100%);
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+.goal-footer {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    color: #9ca3af;
+    font-weight: 500;
+    margin-top: auto;
+    padding-top: 1rem;
+    border-top: 1px solid #374151;
+    /* Separator */
+}
+
+.goal-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: #e5e7eb;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.goal-btn:hover {
+    background: white;
+    color: #1f2937;
+}
+
+.goal-btn.delete:hover {
+    background: #ef4444;
+    color: white;
+}

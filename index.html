@@ -158,6 +158,9 @@
 
             <!-- RESUMO TAB (Transactions) -->
             <div id="view-resume" class="tab-content active">
+
+
+
                 <div class="section-header">
                     <h2><i class="fa-solid fa-money-bill-transfer"></i> Transações</h2>
                     <button class="btn btn-success" onclick="window.app.openModal()">
@@ -173,7 +176,7 @@
                                 <th>Categoria</th>
                                 <th>Tipo</th>
                                 <th>Valor (R$)</th>
-                                <th>Ação</th>
+                                <th class="text-center" style="text-align: center;">Ação</th>
                             </tr>
                         </thead>
                         <tbody id="transactionsBody">
@@ -339,56 +342,61 @@
             </div>
             <div class="modal-body">
                 <form id="transactionForm">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="transDate">Data</label>
-                            <input type="date" id="transDate" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="transValue">Valor Total</label>
-                            <input type="number" id="transValue" step="0.01" min="0" placeholder="0,00" required>
-                        </div>
+                    <!-- 1. Type Toggle Buttons -->
+                    <div class="type-toggle-container">
+                        <button type="button" class="type-btn" id="btnTypeIncome" onclick="app.setTransType('income')">
+                            <i class="fa-solid fa-arrow-up"></i> Receita
+                        </button>
+                        <button type="button" class="type-btn active" id="btnTypeExpense"
+                            onclick="app.setTransType('expense')">
+                            <i class="fa-solid fa-arrow-down"></i> Despesa
+                        </button>
+                        <input type="hidden" id="transType" name="transType" value="expense">
                     </div>
 
-                    <div class="form-group">
-                        <label for="transDesc">Descrição</label>
-                        <input type="text" id="transDesc" placeholder="Ex: Salário, Aluguel" required>
+                    <!-- 2. Giant Value Input -->
+                    <div class="form-group center-input">
+                        <label>Valor (R$)</label>
+                        <input type="number" id="transAmount" step="0.01" min="0" placeholder="0,00" required
+                            class="giant-input">
                     </div>
 
-                    <div class="form-row">
+                    <!-- 3. Date & Category (Grid 50/50) -->
+                    <div class="modal-grid-row">
                         <div class="form-group">
-                            <label for="transCategory">Categoria</label>
-                            <select id="transCategory" required class="category-select">
+                            <label>Data</label>
+                            <input type="date" id="transDate" required class="modal-input">
+                        </div>
+                        <div class="form-group">
+                            <label>Categoria</label>
+                            <select id="transCategory" required class="modal-input category-select">
                                 <!-- Populated dynamically -->
                             </select>
                         </div>
+                    </div>
+
+                    <!-- 4. Description (Full Width) -->
+                    <div class="form-group">
+                        <label>Descrição</label>
+                        <input type="text" id="transDesc" placeholder="Ex: Salário, Aluguel" required
+                            class="modal-input">
+                    </div>
+
+                    <!-- Optional: Tags & Installments -->
+                    <div class="modal-grid-row">
                         <div class="form-group">
-                            <label>Tipo</label>
-                            <div class="radio-group">
-                                <label class="radio-label income">
-                                    <input type="radio" name="transType" value="income" checked> Receita
-                                </label>
-                                <label class="radio-label expense">
-                                    <input type="radio" name="transType" value="expense"> Despesa
-                                </label>
-                            </div>
+                            <label>Tags (Opcional)</label>
+                            <input type="text" id="transTags" placeholder="viagem, extra" class="modal-input">
+                        </div>
+                        <div class="form-group" id="installmentsGroup">
+                            <label>Parcelas</label>
+                            <input type="number" id="transInstallments" min="1" max="60" value="1" class="modal-input">
                         </div>
                     </div>
 
-                    <div class="form-group">
-                        <label for="transTags">Tags (Separadas por vírgula)</label>
-                        <input type="text" id="transTags" placeholder="Ex: essencial, viagem, supérfluo">
-                    </div>
-
-                    <div class="form-group" id="installmentsGroup">
-                        <label for="transInstallments">Parcelas (Opcional)</label>
-                        <input type="number" id="transInstallments" min="1" max="60" value="1">
-                    </div>
-
                     <div class="form-actions">
-                        <button type="button" class="btn btn-outline"
-                            onclick="window.app.closeModal()">Cancelar</button>
-                        <button type="submit" class="btn btn-success">Salvar</button>
+                        <button type="button" class="btn btn-ghost" onclick="window.app.closeModal()">Cancelar</button>
+                        <button type="submit" class="btn btn-save">Salvar</button>
                     </div>
                 </form>
             </div>
