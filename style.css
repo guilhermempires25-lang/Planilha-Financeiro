@@ -1826,3 +1826,30 @@ margin-bottom: 0.25rem;
     color: white;
     transform: scale(1.1);
 }
+
+/* Botão de Delete (Lixeira) */
+.btn-delete {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.btn-delete:hover {
+    background: #ef4444;
+    color: white;
+    transform: scale(1.1);
+}
+
+/* DARK MODE DATE PICKER FIX */
+:root {
+    color-scheme: dark;
+    /* Forces native inputs (date, time) to use OS dark theme */
+}

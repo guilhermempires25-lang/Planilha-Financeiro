@@ -1241,21 +1241,24 @@ class FinanceApp {
 
         const devedor = getVal('recName');
         const descBase = getVal('recDesc');
-        const totalVal = parseFloat(getVal('recValue'));
+
+        // FIX: Handle "1.000,00" format correctly
+        let valStr = getVal('recValue');
+        // Remove dots (thousands) and replace comma with dot (decimal)
+        valStr = valStr.replace(/\./g, '').replace(',', '.');
+        const totalVal = parseFloat(valStr) || 0;
+
         const dateStr = getVal('recDate');
         let installments = parseInt(getVal('recInstallments')) || 1;
-
         if (installments < 1) installments = 1;
 
         const valPerInst = totalVal / installments;
         const baseDate = new Date(dateStr);
         const newRecs = [];
 
-        // Generate N entries
         for (let i = 0; i < installments; i++) {
             const d = new Date(baseDate);
-            d.setMonth(d.getMonth() + i); // Add month for subsequent installments
-
+            d.setMonth(d.getMonth() + i);
             const finalDesc = installments > 1 ? `${descBase} (${i + 1}/${installments})` : descBase;
 
             newRecs.push({
@@ -1274,7 +1277,6 @@ class FinanceApp {
             this.success(installments > 1 ? `${installments} Cobranças Geradas!` : 'Cobrança Adicionada');
             this.renderReceivables();
             e.target.reset();
-            // Reset installments to 1
             if (document.getElementById('recInstallments')) document.getElementById('recInstallments').value = 1;
         } else {
             this.error(error.message);
@@ -1290,7 +1292,7 @@ class FinanceApp {
             return;
         }
 
-        container.classList.add('debts-list-container'); // Ensure container CSS class if not present
+        container.classList.add('debts-list-container');
 
         container.innerHTML = this.receivables.map(r => {
             const initial = r.devedor.charAt(0).toUpperCase();
@@ -1305,9 +1307,14 @@ class FinanceApp {
                 </div>
                 <div class="debt-actions">
                     <div class="debt-value">${this.formatCurrency(r.valor)}</div>
-                    <button class="btn-check" onclick="window.app.confirmReceive('${r.id}')" title="Receber">
-                        <i class="fa-solid fa-check"></i>
-                    </button>
+                    <div style="display:flex; gap: 5px;">
+                         <button class="btn-check" onclick="window.app.confirmReceive('${r.id}')" title="Receber">
+                            <i class="fa-solid fa-check"></i>
+                        </button>
+                        <button class="btn-delete" onclick="window.app.deleteReceivable('${r.id}')" title="Excluir">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
                 </div>
             </div>`;
         }).join('');
@@ -1318,7 +1325,6 @@ class FinanceApp {
         if (!item) return;
 
         if (confirm(`Confirmar recebimento de ${this.formatCurrency(item.valor)} de ${item.devedor}?`)) {
-            // 1. Create Income
             const { error: transError } = await this.supabase.from('transacoes').insert([{
                 descricao: `Recebido de ${item.devedor} (${item.descricao})`,
                 valor: item.valor,
@@ -1333,8 +1339,6 @@ class FinanceApp {
                 return;
             }
 
-            // 2. Mark as Paid (Delete or Update) -> Using Update for history could be better, but user said "remove".
-            // Let's Update to paid=true so it vanishes from list (filtered in loadData)
             const { error: updateError } = await this.supabase.from('valores_a_receber')
                 .update({ pago: true })
                 .eq('id', id);
@@ -1347,6 +1351,18 @@ class FinanceApp {
             } else {
                 this.error(updateError.message);
             }
+        }
+    }
+
+    async deleteReceivable(id) {
+        if (!confirm('Excluir esta cobrança?')) return;
+        const { error } = await this.supabase.from('valores_a_receber').delete().eq('id', id);
+        if (!error) {
+            this.receivables = this.receivables.filter(x => x.id !== id);
+            this.renderReceivables();
+            this.showToast('Excluído com sucesso');
+        } else {
+            this.error(error.message);
         }
     }
 
