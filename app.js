@@ -1286,23 +1286,26 @@ class FinanceApp {
         const container = this.els.recModal.querySelector('#receivablesList');
 
         if (this.receivables.length === 0) {
-            container.innerHTML = '<div class="empty-state">Ninguém te deve nada! 🎉</div>';
+            container.innerHTML = '<div class="empty-state" style="padding: 2rem; color: #9ca3af; text-align: center;">Ninguém te deve nada! 🎉</div>';
             return;
         }
+
+        container.classList.add('debts-list-container'); // Ensure container CSS class if not present
 
         container.innerHTML = this.receivables.map(r => {
             const initial = r.devedor.charAt(0).toUpperCase();
             const dateStr = this.formatDate(r.data_prevista);
+
             return `
-            <div class="receivable-card">
-                <div class="avatar-circle">${initial}</div>
-                <div class="receivable-info">
-                    <strong>${r.devedor}</strong>
-                    <span>${r.descricao} • ${dateStr}</span>
+            <div class="debt-card">
+                <div class="debt-avatar">${initial}</div>
+                <div class="debt-info">
+                    <div class="debt-name">${r.devedor} <span class="debt-desc">${r.descricao}</span></div>
+                    <div class="debt-date">${dateStr}</div>
                 </div>
-                <div class="receivable-actions">
+                <div class="debt-actions">
                     <div class="debt-value">${this.formatCurrency(r.valor)}</div>
-                    <button class="btn-receive" onclick="window.app.confirmReceive('${r.id}')" title="Confirmar Recebimento">
+                    <button class="btn-check" onclick="window.app.confirmReceive('${r.id}')" title="Receber">
                         <i class="fa-solid fa-check"></i>
                     </button>
                 </div>
