@@ -1604,3 +1604,110 @@ margin-bottom: 0.25rem;
     background: #ef4444;
     color: white;
 }
+
+/* FIX: Ensure Transaction Modal is always on top (e.g. over Card Details) */
+#transactionModal {
+    z-index: 2000;
+}
+
+/* FIX: Resize Category Icons */
+.category-icon {
+    font-size: 2rem;
+    /* Reduced from default/inherited size */
+    margin-bottom: 0.5rem;
+}
+
+.category-card {
+    padding: 1.5rem;
+}
+
+/* --- MODO MOBILE (Celulares) --- */
+@media (max-width: 768px) {
+
+    /* 1. Ajuste Geral do Container */
+    .container,
+    main {
+        padding: 10px;
+        width: 100%;
+    }
+
+    /* 2. Cards do Topo (Saldo) empilhados */
+    #summary-cards {
+        grid-template-columns: 1fr;
+        /* Um por linha */
+        gap: 15px;
+    }
+
+    /* 3. Filtros e Datas no topo */
+    .filters-section {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .filters-section select,
+    .filters-section input {
+        width: 100%;
+    }
+
+    /* 4. TRANSFORMAÇÃO MÁGICA: Tabela vira Cards */
+    /* Esconde o cabeçalho da tabela */
+    table thead {
+        display: none;
+    }
+
+    /* Transforma cada linha (tr) em um Card */
+    table tbody tr {
+        display: flex;
+        flex-direction: column;
+        background: #1f2937;
+        margin-bottom: 15px;
+        padding: 15px;
+        border-radius: 16px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        border: 1px solid #374151;
+    }
+
+    /* Ajusta as células (td) */
+    table tbody td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid #374151;
+        text-align: right;
+    }
+
+    /* Remove borda da última linha do card */
+    table tbody td:last-child {
+        border-bottom: none;
+    }
+
+    /* Força alinhamento para ficar bonito */
+    /* Data e Categoria ganham destaque */
+    table tbody td:nth-child(1) {
+        color: #9ca3af;
+        font-size: 0.9rem;
+    }
+
+    /* Data */
+    table tbody td:nth-child(2) {
+        font-size: 1.1rem;
+        margin-bottom: 5px;
+    }
+
+    /* Descrição */
+    /* 5. Modais (Janelas) ocupam a tela toda */
+    .modal-content {
+        width: 95%;
+        margin: 10px auto;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    /* 6. Grids de Cartões e Metas */
+    .cards-grid,
+    .goals-grid {
+        grid-template-columns: 1fr;
+        /* Um por linha */
+    }
+}
