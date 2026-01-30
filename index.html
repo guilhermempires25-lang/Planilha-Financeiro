@@ -11,344 +11,389 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=18">
 </head>
 
 <body>
-    <div class="container">
-        <!-- Header -->
-        <header class="main-header">
-            <div class="header-content">
-                <div class="logo">
-                    <i class="fa-solid fa-sack-dollar"></i>
-                    <div>
-                        <h1>Controle Financeiro Pessoal</h1>
-                        <p>Gerencie suas finanças de forma simples e eficiente</p>
+    <!-- AUTH SCREEN -->
+    <div id="authScreen" class="auth-screen">
+        <div class="auth-background">
+            <div class="shape shape-1"></div>
+            <div class="shape shape-2"></div>
+            <div class="shape shape-3"></div>
+        </div>
+        <div class="login-card">
+            <div class="login-header">
+                <i class="fa-solid fa-rocket login-logo"></i>
+                <h2>Bem-vindo!</h2>
+                <p>Acesse suas finanças</p>
+            </div>
+            <form id="loginForm">
+                <div class="login-input-group">
+                    <label>E-mail</label>
+                    <div class="input-wrapper">
+                        <i class="fa-solid fa-envelope input-icon"></i>
+                        <input type="email" id="emailInput" placeholder="seu@email.com" required>
                     </div>
                 </div>
-                <div class="header-actions">
-                    <div class="notification-container" style="position: relative;">
-                        <button class="btn btn-outline" id="notifBtn" onclick="window.app.toggleNotifications()"
-                            title="Alertas">
-                            <i class="fa-solid fa-bell"></i>
-                            <span id="notifBadge"
-                                style="display:none; position:absolute; top:-5px; right:-5px; background:red; color:white; border-radius:50%; width:18px; height:18px; font-size:10px; display:flex; align-items:center; justify-content:center;">0</span>
+                <div class="login-input-group">
+                    <label>Senha</label>
+                    <div class="input-wrapper">
+                        <i class="fa-solid fa-lock input-icon"></i>
+                        <input type="password" id="passwordInput" placeholder="********" required>
+                        <i class="fa-solid fa-eye password-toggle" onclick="window.app.togglePasswordVisibility()"
+                            title="Mostrar senha"></i>
+                    </div>
+                    <div id="capsLockWarning" class="caps-warning hidden">
+                        <i class="fa-solid fa-arrow-up-a-z"></i> Caps Lock ativado!
+                    </div>
+                </div>
+                <button type="submit" class="login-btn">
+                    <span id="loginBtnText">Entrar</span>
+                    <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div id="app" style="display: block;"> <!-- Wrapper for App Content -->
+        <!-- DASHBOARD BACKGROUND SHAPES -->
+        <div class="auth-background" style="z-index: -1;">
+            <div class="shape shape-1"></div>
+            <div class="shape shape-2"></div>
+            <div class="shape shape-3"></div>
+        </div>
+
+        <div class="container">
+            <!-- Header -->
+            <header class="main-header">
+                <div class="header-content">
+                    <div class="logo">
+                        <i class="fa-solid fa-sack-dollar"></i>
+                        <div>
+                            <h1>Controle Financeiro Pessoal</h1>
+                            <p>Gerencie suas finanças de forma simples e eficiente</p>
+                        </div>
+                    </div>
+                    <div class="header-actions">
+                        <div class="notification-container" style="position: relative;">
+                            <button class="btn btn-outline" id="notifBtn" onclick="window.app.toggleNotifications()"
+                                title="Alertas">
+                                <i class="fa-solid fa-bell"></i>
+                                <span id="notifBadge"
+                                    style="display:none; position:absolute; top:-5px; right:-5px; background:red; color:white; border-radius:50%; width:18px; height:18px; font-size:10px; display:flex; align-items:center; justify-content:center;">0</span>
+                            </button>
+                            <div id="notifDropdown"
+                                style="display: none; position: absolute; top: 100%; right: 0; width: 300px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 1000; padding: 10px;">
+                                <h4
+                                    style="margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">
+                                    Notificações</h4>
+                                <div id="notifList" style="max-height: 200px; overflow-y: auto;">
+                                    <p style="color: var(--text-secondary); font-size: 0.9rem;">Sem novas notificações.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button class="btn btn-outline" id="themeToggle" title="Alternar Tema">
+                            <i class="fa-solid fa-moon"></i>
                         </button>
-                        <div id="notifDropdown"
-                            style="display: none; position: absolute; top: 100%; right: 0; width: 300px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 1000; padding: 10px;">
-                            <h4
-                                style="margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">
-                                Notificações</h4>
-                            <div id="notifList" style="max-height: 200px; overflow-y: auto;">
-                                <p style="color: var(--text-secondary); font-size: 0.9rem;">Sem novas notificações.</p>
+                        <button class="btn btn-outline" onclick="window.app.togglePrivacy()" title="Modo Privacidade"
+                            id="privacyToggle">
+                            <i class="fa-solid fa-eye"></i>
+                        </button>
+                        <button class="btn btn-outline" onclick="document.getElementById('fileInput').click()">
+                            <i class="fa-solid fa-file-import"></i> Importar
+                        </button>
+                        <button class="btn btn-primary" onclick="window.app.exportData()">
+                            <i class="fa-solid fa-file-export"></i> Exportar
+                        </button>
+                        <input type="file" id="fileInput" accept=".json" style="display: none;"
+                            onchange="window.app.importData(this)">
+                        <button class="btn btn-outline" onclick="window.app.logout()" title="Sair"
+                            style="color: #ef4444; border-color: #ef4444;">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Filters -->
+            <section class="filters-section">
+                <div class="input-group">
+                    <label>Data</label>
+                    <div class="month-nav">
+                        <button id="btnPrevMonth" class="btn-icon"><i class="fa-solid fa-chevron-left"></i></button>
+                        <span id="monthLabel" style="min-width: 100px; text-align: center;">Janeiro</span>
+                        <button id="btnNextMonth" class="btn-icon"><i class="fa-solid fa-chevron-right"></i></button>
+
+                        <select id="yearSelector" class="year-select"
+                            style="margin-left: 10px; padding: 5px; border-radius: 5px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-color);">
+                            <option value="2024">2024</option>
+                            <option value="2025">2025</option>
+                            <option value="2026" selected>2026</option>
+                            <option value="2027">2027</option>
+                            <option value="2028">2028</option>
+                            <option value="2029">2029</option>
+                            <option value="2030">2030</option>
+                        </select>
+                        <input type="hidden" id="monthYear">
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label for="tagFilter">Filtrar por Tag</label>
+                    <select id="tagFilter">
+                        <option value="">Todas</option>
+                        <!-- Populated dynamically -->
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="initialBalance">Saldo Inicial (R$)</label>
+                    <input type="number" id="initialBalance" value="0" step="0.01">
+                </div>
+            </section>
+
+            <!-- Dashboard Cards -->
+            <section class="dashboard-cards">
+                <div class="card card-green">
+                    <div class="card-header">
+                        <span>Receitas</span>
+                        <i class="fa-solid fa-chart-line"></i>
+                    </div>
+                    <div class="card-value sensitive" id="incomeDisplay">R$ 0,00</div>
+                </div>
+                <div class="card card-red">
+                    <div class="card-header">
+                        <span>Despesas</span>
+                        <i class="fa-solid fa-chart-area"></i>
+                    </div>
+                    <div class="card-value sensitive" id="expenseDisplay">R$ 0,00</div>
+                </div>
+                <div class="card card-blue">
+                    <div class="card-header">
+                        <span>Saldo do Mês</span>
+                        <i class="fa-solid fa-wallet"></i>
+                    </div>
+                    <div class="card-value sensitive" id="monthlyBalanceDisplay">R$ 0,00</div>
+                </div>
+                <div class="card card-purple">
+                    <div class="card-header">
+                        <span>Saldo Final</span>
+                        <i class="fa-solid fa-bullseye"></i>
+                    </div>
+                    <div class="card-value sensitive" id="finalBalanceDisplay">R$ 0,00</div>
+                </div>
+            </section>
+
+            <!-- Navigation Tabs -->
+            <nav class="tabs-nav">
+                <button class="tab-btn active" id="btn-resume" data-target="view-resume">
+                    <i class="fa-solid fa-chart-column"></i> Resumo
+                </button>
+                <button class="tab-btn" id="btn-categories" data-target="view-categories">
+                    <i class="fa-solid fa-tags"></i> Categorias
+                </button>
+                <button class="tab-btn" id="btn-fixed" data-target="view-fixed">
+                    <i class="fa-solid fa-rotate"></i> Despesas Fixas
+                </button>
+                <button class="tab-btn" id="btn-projection" data-target="view-projection">
+                    <i class="fa-solid fa-calendar-days"></i> Projeção
+                </button>
+                <button class="tab-btn" id="btn-goals" data-target="view-goals">
+                    <i class="fa-solid fa-bullseye"></i> Metas
+                </button>
+                <button class="tab-btn" id="btn-cards" data-target="view-cards">
+                    <i class="fa-solid fa-credit-card"></i> Cartões
+                </button>
+            </nav>
+
+            <!-- Content Area -->
+            <main class="content-area">
+
+                <!-- RESUMO TAB (Transactions) -->
+                <div id="view-resume" class="tab-content active">
+
+
+
+                    <div class="section-header">
+                        <h2><i class="fa-solid fa-money-bill-transfer"></i> Transações</h2>
+                        <button class="btn btn-success" onclick="window.app.openModal()">
+                            <i class="fa-solid fa-plus"></i> Adicionar
+                        </button>
+                    </div>
+                    <!-- Glass Transactions List -->
+                    <div class="glass-container">
+                        <div class="flex justify-between items-center mb-6">
+                            <h3 class="text-xl font-bold">Movimentações</h3>
+                            <div class="text-sm text-gray-400" id="transCount">
+                                <div class="skeleton" style="width: 80px; height: 16px;"></div>
+                            </div>
+                        </div>
+
+                        <div id="transactionsList" class="transactions-grid">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CATEGORIAS TAB -->
+                <div id="view-categories" class="tab-content">
+                    <div class="section-header">
+                        <h2><i class="fa-solid fa-tags"></i> Gerenciar Categorias</h2>
+
+                    </div>
+                    <div class="categories-grid" id="categoriesList">
+                        <!-- Categories will be rendered here -->
+                    </div>
+                </div>
+
+                <!-- DESPESAS FIXAS TAB -->
+                <div id="view-fixed" class="tab-content">
+                    <div class="section-header">
+                        <h2><i class="fa-solid fa-rotate"></i> Despesas Fixas</h2>
+                        <button class="btn btn-success" onclick="window.app.openFixedModal()">
+                            <i class="fa-solid fa-plus"></i> Nova Fixa
+                        </button>
+                    </div>
+                    <!-- Controls for Fixed Expenses -->
+                    <div class="fixed-expenses-controls"
+                        style="margin-bottom: 2rem; background: var(--bg-secondary); padding: 1.5rem; border-radius: 16px; border: 1px solid var(--border-color);">
+                        <p
+                            style="margin-bottom: 1rem; font-size: 0.95rem; color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-circle-info text-blue"></i>
+                            As despesas fixas cadastradas aparecem automaticamente no Resumo Mensal.
+                        </p>
+                        <button id="btn-generate-fixed" onclick="window.app.generateFixedForMonth()">
+                            <i class="fa-solid fa-bolt"></i> Gerar no Mês Atual
+                        </button>
+                    </div>
+
+                    <div class="fixed-section" style="margin-bottom: 2rem;">
+                        <h3
+                            style="margin-bottom: 1rem; color: var(--green-color); display: flex; align-items: center; gap: 10px;">
+                            <i class="fa-solid fa-arrow-up"></i> Receitas Fixas
+                        </h3>
+                        <div id="fixedIncomeBody" class="fixed-grid">
+                            <!-- Fixed Income Cards -->
+                        </div>
+                    </div>
+
+                    <div class="fixed-section">
+                        <h3
+                            style="margin-bottom: 1rem; color: var(--red-color); display: flex; align-items: center; gap: 10px;">
+                            <i class="fa-solid fa-arrow-down"></i> Despesas Fixas
+                        </h3>
+                        <div id="fixedExpensesBody" class="fixed-grid">
+                            <!-- Fixed Expenses Cards -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PROJEÇÃO TAB -->
+                <!-- PROJEÇÃO TAB (Charts) -->
+                <div id="view-projection" class="tab-content">
+                    <div class="section-header">
+                        <h2><i class="fa-solid fa-chart-pie"></i> Análise Gráfica</h2>
+                    </div>
+
+                    <div class="charts-section">
+                        <div class="chart-card">
+                            <h3 class="chart-title">Fluxo de Caixa Diário</h3>
+                            <div class="chart-container-inner" style="position: relative; height: 300px; width: 100%;">
+                                <canvas id="projectionChart"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="chart-card">
+                            <h3 class="chart-title">Gastos por Categoria</h3>
+                            <div class="chart-container-inner" style="position: relative; height: 300px; width: 100%;">
+                                <canvas id="categoryChart"></canvas>
                             </div>
                         </div>
                     </div>
-                    <button class="btn btn-outline" onclick="window.app.setSavingsGoal()"
-                        title="Definir Meta de Economia">
-                        <i class="fa-solid fa-piggy-bank"></i>
-                    </button>
-                    <button class="btn btn-outline" id="themeToggle" title="Alternar Tema">
-                        <i class="fa-solid fa-moon"></i>
-                    </button>
-                    <button class="btn btn-outline" onclick="document.getElementById('fileInput').click()">
-                        <i class="fa-solid fa-file-import"></i> Importar
-                    </button>
-                    <button class="btn btn-primary" onclick="window.app.exportData()">
-                        <i class="fa-solid fa-file-export"></i> Exportar
-                    </button>
-                    <input type="file" id="fileInput" accept=".json" style="display: none;"
-                        onchange="window.app.importData(this)">
+
+                    <div id="forecastDisplay"></div>
                 </div>
-            </div>
-        </header>
 
-        <!-- Filters -->
-        <section class="filters-section">
-            <div class="input-group">
-                <label>Data</label>
-                <div class="month-nav">
-                    <button id="btnPrevMonth" class="btn-icon"><i class="fa-solid fa-chevron-left"></i></button>
-                    <span id="monthLabel" style="min-width: 100px; text-align: center;">Janeiro</span>
-                    <button id="btnNextMonth" class="btn-icon"><i class="fa-solid fa-chevron-right"></i></button>
-
-                    <select id="yearSelector" class="year-select"
-                        style="margin-left: 10px; padding: 5px; border-radius: 5px; border: 1px solid var(--border-color); background: var(--card-bg); color: var(--text-color);">
-                        <option value="2024">2024</option>
-                        <option value="2025">2025</option>
-                        <option value="2026" selected>2026</option>
-                        <option value="2027">2027</option>
-                        <option value="2028">2028</option>
-                        <option value="2029">2029</option>
-                        <option value="2030">2030</option>
-                    </select>
-                    <input type="hidden" id="monthYear">
-                </div>
-            </div>
-            <div class="input-group">
-                <label for="tagFilter">Filtrar por Tag</label>
-                <select id="tagFilter">
-                    <option value="">Todas</option>
-                    <!-- Populated dynamically -->
-                </select>
-            </div>
-            <div class="input-group">
-                <label for="initialBalance">Saldo Inicial (R$)</label>
-                <input type="number" id="initialBalance" value="0" step="0.01">
-            </div>
-        </section>
-
-        <!-- Dashboard Cards -->
-        <section class="dashboard-cards">
-            <div class="card card-green">
-                <div class="card-header">
-                    <span>Receitas</span>
-                    <i class="fa-solid fa-chart-line"></i>
-                </div>
-                <div class="card-value" id="incomeDisplay">R$ 0,00</div>
-            </div>
-            <div class="card card-red">
-                <div class="card-header">
-                    <span>Despesas</span>
-                    <i class="fa-solid fa-chart-area"></i>
-                </div>
-                <div class="card-value" id="expenseDisplay">R$ 0,00</div>
-            </div>
-            <div class="card card-blue">
-                <div class="card-header">
-                    <span>Saldo do Mês</span>
-                    <i class="fa-solid fa-wallet"></i>
-                </div>
-                <div class="card-value" id="monthlyBalanceDisplay">R$ 0,00</div>
-            </div>
-            <div class="card card-purple">
-                <div class="card-header">
-                    <span>Saldo Final</span>
-                    <i class="fa-solid fa-bullseye"></i>
-                </div>
-                <div class="card-value" id="finalBalanceDisplay">R$ 0,00</div>
-            </div>
-        </section>
-
-        <!-- Navigation Tabs -->
-        <!-- Navigation Tabs -->
-        <nav class="tabs-nav">
-            <button class="tab-btn active" id="btn-resume" data-target="view-resume">
-                <i class="fa-solid fa-chart-column"></i> Resumo
-            </button>
-            <button class="tab-btn" id="btn-categories" data-target="view-categories">
-                <i class="fa-solid fa-tags"></i> Categorias
-            </button>
-            <button class="tab-btn" id="btn-fixed" data-target="view-fixed">
-                <i class="fa-solid fa-rotate"></i> Despesas Fixas
-            </button>
-            <button class="tab-btn" id="btn-projection" data-target="view-projection">
-                <i class="fa-solid fa-calendar-days"></i> Projeção
-            </button>
-            <button class="tab-btn" id="btn-goals" data-target="view-goals">
-                <i class="fa-solid fa-bullseye"></i> Metas
-            </button>
-            <button class="tab-btn" id="btn-cards" data-target="view-cards">
-                <i class="fa-solid fa-credit-card"></i> Cartões
-            </button>
-        </nav>
-
-        <!-- Content Area -->
-        <main class="content-area">
-
-            <!-- RESUMO TAB (Transactions) -->
-            <div id="view-resume" class="tab-content active">
-
-
-
-                <div class="section-header">
-                    <h2><i class="fa-solid fa-money-bill-transfer"></i> Transações</h2>
-                    <button class="btn btn-success" onclick="window.app.openModal()">
-                        <i class="fa-solid fa-plus"></i> Adicionar
-                    </button>
-                </div>
-                <div class="table-container">
-                    <table class="transactions-table">
-                        <thead>
-                            <tr>
-                                <th>Data</th>
-                                <th>Descrição</th>
-                                <th>Categoria</th>
-                                <th>Tipo</th>
-                                <th>Valor (R$)</th>
-                                <th class="text-center" style="text-align: center;">Ação</th>
-                            </tr>
-                        </thead>
-                        <tbody id="transactionsBody">
-                            <!-- Transactions -->
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- CATEGORIAS TAB -->
-            <div id="view-categories" class="tab-content">
-                <div class="section-header">
-                    <h2><i class="fa-solid fa-tags"></i> Gerenciar Categorias</h2>
-                    <div class="add-cat-form">
-                        <input type="text" id="newCatName" placeholder="Nova Categoria">
-                        <button class="btn btn-primary" onclick="window.app.addCategory()">
-                            <i class="fa-solid fa-plus"></i>
+                <!-- METAS TAB -->
+                <div id="view-goals" class="tab-content">
+                    <div class="section-header">
+                        <h2><i class="fa-solid fa-bullseye"></i> Metas Financeiras</h2>
+                        <button class="btn btn-success" onclick="window.app.openGoalModal()">
+                            <i class="fa-solid fa-plus"></i> Nova Meta
                         </button>
                     </div>
-                </div>
-                <div class="categories-grid" id="categoriesList">
-                    <!-- Categories will be rendered here -->
-                </div>
-            </div>
-
-            <!-- DESPESAS FIXAS TAB -->
-            <div id="view-fixed" class="tab-content">
-                <div class="section-header">
-                    <h2><i class="fa-solid fa-rotate"></i> Despesas Fixas</h2>
-                    <button class="btn btn-success" onclick="window.app.openFixedModal()">
-                        <i class="fa-solid fa-plus"></i> Nova Fixa
-                    </button>
-                </div>
-                <!-- Controls for Fixed Expenses -->
-                <div class="fixed-expenses-controls"
-                    style="margin-bottom: 2rem; background: var(--bg-secondary); padding: 1.5rem; border-radius: 16px; border: 1px solid var(--border-color);">
-                    <p
-                        style="margin-bottom: 1rem; font-size: 0.95rem; color: var(--text-secondary); display: flex; align-items: center; gap: 8px;">
-                        <i class="fa-solid fa-circle-info text-blue"></i>
-                        As despesas fixas cadastradas aparecem automaticamente no Resumo Mensal.
-                    </p>
-                    <button id="btn-generate-fixed" onclick="window.app.generateFixedForMonth()">
-                        <i class="fa-solid fa-bolt"></i> Gerar no Mês Atual
-                    </button>
-                </div>
-
-                <div class="fixed-section" style="margin-bottom: 2rem;">
-                    <h3
-                        style="margin-bottom: 1rem; color: var(--green-color); display: flex; align-items: center; gap: 10px;">
-                        <i class="fa-solid fa-arrow-up"></i> Receitas Fixas
-                    </h3>
-                    <div id="fixedIncomeBody" class="fixed-grid">
-                        <!-- Fixed Income Cards -->
+                    <div class="goals-grid" id="goalsList">
+                        <!-- Goals Cards -->
                     </div>
                 </div>
 
-                <div class="fixed-section">
-                    <h3
-                        style="margin-bottom: 1rem; color: var(--red-color); display: flex; align-items: center; gap: 10px;">
-                        <i class="fa-solid fa-arrow-down"></i> Despesas Fixas
-                    </h3>
-                    <div id="fixedExpensesBody" class="fixed-grid">
-                        <!-- Fixed Expenses Cards -->
-                    </div>
-                </div>
-            </div>
-
-            <!-- PROJEÇÃO TAB -->
-            <!-- PROJEÇÃO TAB (Charts) -->
-            <div id="view-projection" class="tab-content">
-                <div class="section-header">
-                    <h2><i class="fa-solid fa-chart-pie"></i> Análise Gráfica</h2>
-                </div>
-
-                <div class="charts-section">
-                    <div class="chart-card">
-                        <h3 class="chart-title">Fluxo de Caixa Diário</h3>
-                        <div class="chart-container-inner" style="position: relative; height: 300px; width: 100%;">
-                            <canvas id="projectionChart"></canvas>
+                <!-- CARTÕES TAB -->
+                <div id="view-cards" class="tab-content">
+                    <div class="section-header">
+                        <h2><i class="fa-solid fa-credit-card"></i> Meus Cartões</h2>
+                        <div class="cards-actions">
+                            <button class="btn btn-outline" onclick="window.app.openReceivablesModal()">
+                                <i class="fa-solid fa-hand-holding-dollar"></i> Valores a Receber
+                            </button>
+                            <button class="btn btn-success" onclick="window.app.openCardModal()">
+                                <i class="fa-solid fa-plus"></i> Novo Cartão
+                            </button>
                         </div>
                     </div>
+                    <div class="cards-grid" id="cardsList">
+                        <!-- Cards will be rendered here -->
+                    </div>
+                </div>
 
-                    <div class="chart-card">
-                        <h3 class="chart-title">Gastos por Categoria</h3>
-                        <div class="chart-container-inner" style="position: relative; height: 300px; width: 100%;">
-                            <canvas id="categoryChart"></canvas>
+                <!-- Receivables (Valores a Receber) Modal -->
+                <div class="modal" id="receivablesModal">
+                    <div class="modal-content" style="max-width: 600px;">
+                        <div class="modal-header">
+                            <h3>Valores a Receber 💰</h3>
+                            <span class="close-modal" onclick="window.app.closeReceivablesModal()">&times;</span>
                         </div>
-                    </div>
-                </div>
+                        <div class="modal-body">
+                            <!-- Smart Form -->
+                            <h4 style="margin-bottom: 1.5rem; color: #9ca3af; text-align: center;">Adicionar Nova
+                                Cobrança</h4>
+                            <form id="addReceivableForm">
 
-                <div id="forecastDisplay"></div>
-            </div>
-
-            <!-- METAS TAB -->
-            <div id="view-goals" class="tab-content">
-                <div class="section-header">
-                    <h2><i class="fa-solid fa-bullseye"></i> Metas Financeiras</h2>
-                    <button class="btn btn-success" onclick="window.app.openGoalModal()">
-                        <i class="fa-solid fa-plus"></i> Nova Meta
-                    </button>
-                </div>
-                <div class="goals-grid" id="goalsList">
-                    <!-- Goals Cards -->
-                </div>
-            </div>
-
-            <!-- CARTÕES TAB -->
-            <div id="view-cards" class="tab-content">
-                <div class="section-header">
-                    <h2><i class="fa-solid fa-credit-card"></i> Meus Cartões</h2>
-                    <div class="cards-actions">
-                        <button class="btn btn-outline" onclick="window.app.openReceivablesModal()">
-                            <i class="fa-solid fa-hand-holding-dollar"></i> Valores a Receber
-                        </button>
-                        <button class="btn btn-success" onclick="window.app.openCardModal()">
-                            <i class="fa-solid fa-plus"></i> Novo Cartão
-                        </button>
-                    </div>
-                </div>
-                <div class="cards-grid" id="cardsList">
-                    <!-- Cards will be rendered here -->
-                </div>
-            </div>
-
-            <!-- Receivables (Valores a Receber) Modal -->
-            <div class="modal" id="receivablesModal">
-                <div class="modal-content" style="max-width: 600px;">
-                    <div class="modal-header">
-                        <h3>Valores a Receber 💰</h3>
-                        <span class="close-modal" onclick="window.app.closeReceivablesModal()">&times;</span>
-                    </div>
-                    <div class="modal-body">
-                        <!-- Smart Form -->
-                        <div class="add-receivable-form"
-                            style="margin-bottom: 2rem; border-bottom: 1px solid #374151; padding-bottom: 1rem;">
-                            <h4 style="margin-bottom: 1rem; color: #9ca3af;">Adicionar Nova Cobrança</h4>
-                            <form id="addReceivableForm" class="grid-form">
-                                <!-- Row 1: Devedor (70%) + Valor (30%) -->
-                                <div class="rec-form-row" style="display: flex; gap: 10px; margin-bottom: 10px;">
-                                    <div style="flex: 7;">
-                                        <label>Devedor</label>
-                                        <input type="text" id="recName" placeholder="Ex: João" class="modal-input"
-                                            required>
-                                    </div>
-                                    <div style="flex: 3;">
-                                        <label>Valor (R$)</label>
-                                        <input type="text" id="recValue" placeholder="0,00" inputmode="decimal"
-                                            class="modal-input" required>
-                                    </div>
+                                <!-- Giant Value Input -->
+                                <div class="form-group center-input">
+                                    <label>Valor Total (R$)</label>
+                                    <input type="number" id="recValue" step="0.01" min="0" required class="giant-input"
+                                        placeholder="0,00">
                                 </div>
 
-                                <!-- Row 2: Desc (50%) + Data (30%) + Parc (20%) -->
-                                <div class="rec-form-row" style="display: flex; gap: 10px; margin-bottom: 10px;">
-                                    <div style="flex: 5;">
-                                        <label>Descrição</label>
-                                        <input type="text" id="recDesc" placeholder="Ex: Almoço" class="modal-input"
-                                            required>
-                                    </div>
-                                    <div style="flex: 3;">
+                                <!-- Devedor -->
+                                <div class="form-group">
+                                    <label>Devedor</label>
+                                    <input type="text" id="recName" placeholder="Ex: João, Cliente X"
+                                        class="modal-input" required>
+                                </div>
+
+                                <!-- Description -->
+                                <div class="form-group">
+                                    <label>Descrição</label>
+                                    <input type="text" id="recDesc" placeholder="Ex: Almoço, Empréstimo"
+                                        class="modal-input" required>
+                                </div>
+
+                                <!-- Date & Installments -->
+                                <div class="modal-grid-row">
+                                    <div class="form-group">
                                         <label>Data</label>
                                         <input type="date" id="recDate" class="modal-input" required>
                                     </div>
-                                    <div style="flex: 2;">
-                                        <label>Parc.</label>
+                                    <div class="form-group">
+                                        <label>Parcelas</label>
                                         <input type="number" id="recInstallments" min="1" value="1" class="modal-input">
                                     </div>
                                 </div>
 
-                                <button type="submit" class="btn btn-save"
-                                    style="width: 100%; margin-top: 5px;">Adicionar</button>
+                                <button type="submit" class="btn btn-save" style="margin-top: 1rem;">Adicionar</button>
                             </form>
                         </div>
 
@@ -360,275 +405,337 @@
                     </div>
                     <!-- Cards Generated via JS -->
                 </div>
-            </div>
-    </div>
-    </div>
 
-    </main>
-    </div>
-
-    <!-- Add Transaction Modal -->
-    <div class="modal" id="transactionModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Nova Transação</h3>
-                <span class="close-modal" onclick="window.app.closeModal()">&times;</span>
-            </div>
-            <div class="modal-body">
-                <form id="transactionForm">
-                    <!-- 1. Type Toggle Buttons -->
-                    <div class="type-toggle-container">
-                        <button type="button" class="type-btn" id="btnTypeIncome" onclick="app.setTransType('income')">
-                            <i class="fa-solid fa-arrow-up"></i> Receita
-                        </button>
-                        <button type="button" class="type-btn active" id="btnTypeExpense"
-                            onclick="app.setTransType('expense')">
-                            <i class="fa-solid fa-arrow-down"></i> Despesa
-                        </button>
-                        <input type="hidden" id="transType" name="transType" value="expense">
-                    </div>
-
-                    <!-- 2. Giant Value Input -->
-                    <div class="form-group center-input">
-                        <label>Valor (R$)</label>
-                        <input type="number" id="transAmount" step="0.01" min="0" placeholder="0,00" required
-                            class="giant-input">
-                    </div>
-
-                    <!-- 3. Date & Category (Grid 50/50) -->
-                    <div class="modal-grid-row">
-                        <div class="form-group">
-                            <label>Data</label>
-                            <input type="date" id="transDate" required class="modal-input">
-                        </div>
-                        <div class="form-group">
-                            <label>Categoria</label>
-                            <select id="transCategory" required class="modal-input category-select">
-                                <!-- Populated dynamically -->
-                            </select>
-                        </div>
-                    </div>
-
-                    <!-- 4. Description (Full Width) -->
-                    <div class="form-group">
-                        <label>Descrição</label>
-                        <input type="text" id="transDesc" placeholder="Ex: Salário, Aluguel" required
-                            class="modal-input">
-                    </div>
-
-                    <!-- Optional: Tags & Installments -->
-                    <div class="modal-grid-row">
-                        <div class="form-group">
-                            <label>Tags (Opcional)</label>
-                            <input type="text" id="transTags" placeholder="viagem, extra" class="modal-input">
-                        </div>
-                        <div class="form-group" id="installmentsGroup">
-                            <label>Parcelas</label>
-                            <input type="number" id="transInstallments" min="1" max="60" value="1" class="modal-input">
-                        </div>
-                    </div>
-
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-ghost" onclick="window.app.closeModal()">Cancelar</button>
-                        <button type="submit" class="btn btn-save">Salvar</button>
-                    </div>
-                </form>
-            </div>
+            </main>
         </div>
-    </div>
 
-    <!-- Fixed Expense Modal -->
-    <div class="modal" id="fixedModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Nova Despesa Fixa</h3>
-                <span class="close-modal" onclick="window.app.closeFixedModal()">&times;</span>
-            </div>
-            <div class="modal-body">
-                <form id="fixedForm">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="fixedDay">Dia de Vencimento</label>
-                            <input type="number" id="fixedDay" min="1" max="31" required placeholder="1-31">
+        <!-- Add Transaction Modal -->
+        <div class="modal" id="transactionModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Nova Transação</h3>
+                    <span class="close-modal" onclick="window.app.closeModal()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <form id="transactionForm">
+                        <!-- 1. Type Toggle Buttons -->
+                        <div class="type-toggle-container">
+                            <button type="button" class="type-btn" id="btnTypeIncome"
+                                onclick="app.setTransType('income')">
+                                <i class="fa-solid fa-arrow-up"></i> Receita
+                            </button>
+                            <button type="button" class="type-btn active" id="btnTypeExpense"
+                                onclick="app.setTransType('expense')">
+                                <i class="fa-solid fa-arrow-down"></i> Despesa
+                            </button>
+                            <input type="hidden" id="transType" name="transType" value="expense">
                         </div>
-                        <div class="form-group">
-                            <label for="fixedValue">Valor (Aprox.)</label>
-                            <input type="number" id="fixedValue" step="0.01" min="0" required>
-                        </div>
-                    </div>
 
-                    <div class="form-group">
-                        <label for="fixedDesc">Descrição</label>
-                        <input type="text" id="fixedDesc" required>
-                    </div>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="fixedCategory">Categoria</label>
-                            <select id="fixedCategory" required class="category-select"></select>
+                        <!-- 2. Giant Value Input -->
+                        <div class="form-group center-input">
+                            <label>Valor (R$)</label>
+                            <input type="number" id="transAmount" step="0.01" min="0" placeholder="0,00" required
+                                class="giant-input">
                         </div>
-                        <div class="form-group">
-                            <label>Tipo</label>
-                            <div class="radio-group">
-                                <label class="radio-label income">
-                                    <input type="radio" name="fixedType" value="income"> Receita
-                                </label>
-                                <label class="radio-label expense">
-                                    <input type="radio" name="fixedType" value="expense" checked> Despesa
-                                </label>
+
+                        <!-- 3. Date & Category (Grid 50/50) -->
+                        <div class="modal-grid-row">
+                            <div class="form-group">
+                                <label>Data</label>
+                                <input type="date" id="transDate" required class="modal-input">
+                            </div>
+                            <div class="form-group">
+                                <label>Categoria</label>
+                                <select id="transCategory" required class="modal-input category-select">
+                                    <!-- Populated dynamically -->
+                                </select>
                             </div>
                         </div>
-                    </div>
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-outline"
-                            onclick="window.app.closeFixedModal()">Cancelar</button>
-                        <button type="submit" class="btn btn-success">Salvar</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
 
-    <!-- Goal Modal -->
-    <div class="modal" id="goalModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Nova Meta</h3>
-                <span class="close-modal" onclick="window.app.closeGoalModal()">&times;</span>
-            </div>
-            <div class="modal-body">
-                <form id="goalForm">
-                    <div class="form-group">
-                        <label for="goalName">Nome da Meta</label>
-                        <input type="text" id="goalName" placeholder="Ex: Viagem, Carro Novo" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="goalTarget">Valor Alvo (R$)</label>
-                        <input type="number" id="goalTarget" step="0.01" min="0" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="goalCurrent">Valor Guardado Atual (R$)</label>
-                        <input type="number" id="goalCurrent" step="0.01" min="0" value="0" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="goalColor">Cor</label>
-                        <input type="color" id="goalColor" value="#3b82f6" style="width: 100%; height: 40px;">
-                    </div>
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-outline"
-                            onclick="window.app.closeGoalModal()">Cancelar</button>
-                        <button type="submit" class="btn btn-success">Salvar</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- Card Modal -->
-    <div class="modal" id="cardModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Novo Cartão</h3>
-                <span class="close-modal" onclick="window.app.closeCardModal()">&times;</span>
-            </div>
-            <div class="modal-body">
-                <form id="cardForm">
-                    <input type="hidden" id="cardId">
-                    <div class="form-group">
-                        <label for="cardName">Nome do Cartão</label>
-                        <input type="text" id="cardName" placeholder="Ex: Nubank, Visa" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="cardLimit">Limite (R$)</label>
-                        <input type="number" id="cardLimit" step="0.01" min="0" required>
-                    </div>
-
-                    <div class="form-row">
+                        <!-- 4. Description (Full Width) -->
                         <div class="form-group">
-                            <label for="cardClosingDay">Dia Fechamento</label>
-                            <input type="number" id="cardClosingDay" min="1" max="31" placeholder="1-31" required>
+                            <label>Descrição</label>
+                            <input type="text" id="transDesc" placeholder="Ex: Salário, Aluguel" required
+                                class="modal-input">
                         </div>
+
+                        <!-- Optional: Tags & Installments -->
+                        <div class="modal-grid-row">
+                            <div class="form-group">
+                                <label>Tags (Opcional)</label>
+                                <input type="text" id="transTags" placeholder="viagem, extra" class="modal-input">
+                            </div>
+                            <div class="form-group" id="installmentsGroup">
+                                <label>Parcelas</label>
+                                <input type="number" id="transInstallments" min="1" max="60" value="1"
+                                    class="modal-input">
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-ghost"
+                                onclick="window.app.closeModal()">Cancelar</button>
+                            <button type="submit" class="btn btn-save">Salvar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fixed Expense Modal -->
+        <div class="modal" id="fixedModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Nova Despesa Fixa</h3>
+                    <span class="close-modal" onclick="window.app.closeFixedModal()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <form id="fixedForm">
+                        <!-- Day and Value Grid -->
+                        <div class="modal-grid-row">
+                            <div class="form-group">
+                                <label for="fixedDay">Dia de Vencimento</label>
+                                <input type="number" id="fixedDay" min="1" max="31" required placeholder="1-31"
+                                    class="modal-input">
+                            </div>
+                            <div class="form-group">
+                                <label for="fixedValue">Valor (Aprox.)</label>
+                                <input type="number" id="fixedValue" step="0.01" min="0" required class="modal-input"
+                                    placeholder="0,00">
+                            </div>
+                        </div>
+
+                        <!-- Description -->
                         <div class="form-group">
-                            <label for="cardDueDay">Dia Vencimento</label>
-                            <input type="number" id="cardDueDay" min="1" max="31" placeholder="1-31" required>
+                            <label for="fixedDesc">Descrição</label>
+                            <input type="text" id="fixedDesc" required class="modal-input"
+                                placeholder="Ex: Aluguel, Academia">
+                        </div>
+
+                        <!-- Category and Type -->
+                        <div class="modal-grid-row">
+                            <div class="form-group">
+                                <label for="fixedCategory">Categoria</label>
+                                <select id="fixedCategory" required class="modal-input category-select"></select>
+                            </div>
+                        </div>
+
+                        <!-- Type Toggle -->
+                        <div class="form-group">
+                            <label style="margin-bottom: 0.5rem; display: block;">Tipo</label>
+                            <div class="type-toggle-container">
+                                <button type="button" class="type-btn" id="btnFixedIncome"
+                                    onclick="app.setFixedType('income')">
+                                    <i class="fa-solid fa-arrow-up"></i> Receita
+                                </button>
+                                <button type="button" class="type-btn active" id="btnFixedExpense"
+                                    onclick="app.setFixedType('expense')">
+                                    <i class="fa-solid fa-arrow-down"></i> Despesa
+                                </button>
+                                <input type="hidden" id="fixedType" name="fixedType" value="expense">
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-ghost"
+                                onclick="window.app.closeFixedModal()">Cancelar</button>
+                            <button type="submit" class="btn btn-save">Salvar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Goal Modal -->
+        <div class="modal" id="goalModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Nova Meta</h3>
+                    <span class="close-modal" onclick="window.app.closeGoalModal()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <form id="goalForm">
+                        <!-- Giant Target -->
+                        <div class="form-group center-input">
+                            <label>Valor Alvo (R$)</label>
+                            <input type="number" id="goalTarget" step="0.01" min="0" required class="giant-input"
+                                placeholder="0,00">
+                        </div>
+
+                        <!-- Name -->
+                        <div class="form-group">
+                            <label for="goalName">Nome da Meta</label>
+                            <input type="text" id="goalName" placeholder="Ex: Viagem, Carro Novo" required
+                                class="modal-input">
+                        </div>
+
+                        <div class="modal-grid-row">
+                            <div class="form-group">
+                                <label for="goalCurrent">Já Guardado (R$)</label>
+                                <input type="number" id="goalCurrent" step="0.01" min="0" value="0" required
+                                    class="modal-input">
+                            </div>
+                        </div>
+
+                        <!-- Color Palette -->
+                        <div class="form-group">
+                            <label style="margin-bottom: 0.5rem; display: block;">Cor da Meta</label>
+                            <div class="color-options-container">
+                                <div class="color-option active" style="background: #10b981;"
+                                    onclick="app.setGoalColor('#10b981', this)"></div>
+                                <div class="color-option" style="background: #3b82f6;"
+                                    onclick="app.setGoalColor('#3b82f6', this)"></div>
+                                <div class="color-option" style="background: #8b5cf6;"
+                                    onclick="app.setGoalColor('#8b5cf6', this)"></div>
+                                <div class="color-option" style="background: #f43f5e;"
+                                    onclick="app.setGoalColor('#f43f5e', this)"></div>
+                                <div class="color-option" style="background: #f59e0b;"
+                                    onclick="app.setGoalColor('#f59e0b', this)"></div>
+                                <input type="hidden" id="goalColor" value="#10b981">
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-ghost"
+                                onclick="window.app.closeGoalModal()">Cancelar</button>
+                            <button type="submit" class="btn btn-save">Salvar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card Modal -->
+        <div class="modal" id="cardModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Novo Cartão</h3>
+                    <span class="close-modal" onclick="window.app.closeCardModal()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <form id="cardForm">
+                        <input type="hidden" id="cardId">
+
+                        <!-- Giant Limit Input -->
+                        <div class="form-group center-input">
+                            <label>Limite (R$)</label>
+                            <input type="number" id="cardLimit" step="0.01" min="0" required class="giant-input"
+                                placeholder="0,00">
+                        </div>
+
+                        <!-- Name -->
+                        <div class="form-group">
+                            <label for="cardName">Nome do Cartão</label>
+                            <input type="text" id="cardName" placeholder="Ex: Nubank, Visa" required
+                                class="modal-input">
+                        </div>
+
+                        <!-- Dates Grid -->
+                        <div class="modal-grid-row">
+                            <div class="form-group">
+                                <label for="cardClosingDay">Dia Fechamento</label>
+                                <input type="number" id="cardClosingDay" min="1" max="31" placeholder="1-31" required
+                                    class="modal-input">
+                            </div>
+                            <div class="form-group">
+                                <label for="cardDueDay">Dia Vencimento</label>
+                                <input type="number" id="cardDueDay" min="1" max="31" placeholder="1-31" required
+                                    class="modal-input">
+                            </div>
+                        </div>
+
+                        <!-- Color Palette -->
+                        <div class="form-group">
+                            <label style="margin-bottom: 0.5rem; display: block;">Cor do Cartão</label>
+                            <div class="color-options-container">
+                                <div class="color-option active" style="background: #8b5cf6;"
+                                    onclick="app.setCardColor('#8b5cf6', this)"></div>
+                                <div class="color-option" style="background: #000000;"
+                                    onclick="app.setCardColor('#000000', this)"></div>
+                                <div class="color-option" style="background: #ef4444;"
+                                    onclick="app.setCardColor('#ef4444', this)"></div>
+                                <div class="color-option" style="background: #3b82f6;"
+                                    onclick="app.setCardColor('#3b82f6', this)"></div>
+                                <div class="color-option" style="background: #f59e0b;"
+                                    onclick="app.setCardColor('#f59e0b', this)"></div>
+                                <input type="hidden" id="cardColor" value="#8b5cf6">
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-ghost"
+                                onclick="window.app.closeCardModal()">Cancelar</button>
+                            <button type="submit" class="btn btn-save">Salvar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card Details Modal -->
+        <div class="modal" id="cardDetailsModal">
+            <div class="modal-content" style="max-width: 600px;">
+                <div class="modal-header">
+                    <div>
+                        <h3 id="detailCardName">Nome do Cartão</h3>
+                        <p style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.25rem;">Fatura Atual
+                        </p>
+                    </div>
+                    <span class="close-modal" onclick="window.app.closeCardDetailsModal()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="card-summary"
+                        style="background: var(--bg-primary); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <span style="font-size: 0.8rem; color: var(--text-secondary); display: block;">Total da
+                                Fatura</span>
+                            <span id="detailCardInvoice"
+                                style="font-size: 1.5rem; font-weight: 700; color: var(--red-color);">R$ 0,00</span>
+                            <span id="detailCardPeriod"
+                                style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-top: 4px;"></span>
+                        </div>
+                        <div>
+                            <span style="font-size: 0.8rem; color: var(--text-secondary); display: block;">Limite
+                                Disponível</span>
+                            <span id="detailCardLimit"
+                                style="font-size: 1.1rem; font-weight: 600; color: var(--green-color);">R$ 0,00</span>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label for="cardColor">Cor do Cartão</label>
-                        <input type="color" id="cardColor" value="#820ad1" style="width: 100%; height: 40px;">
+
+                    <div class="transactions-list-container" id="cardTransactionsList"
+                        style="max-height: 300px; overflow-y: auto; padding: 0.5rem;">
+                        <!-- Card Transactions (Divs) -->
                     </div>
-                    <div class="form-actions">
+
+                    <div class="form-actions" style="justify-content: space-between; margin-top: 1.5rem;">
                         <button type="button" class="btn btn-outline"
-                            onclick="window.app.closeCardModal()">Cancelar</button>
-                        <button type="submit" class="btn btn-success">Salvar</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- Card Details Modal -->
-    <div class="modal" id="cardDetailsModal">
-        <div class="modal-content" style="max-width: 600px;">
-            <div class="modal-header">
-                <div>
-                    <h3 id="detailCardName">Nome do Cartão</h3>
-                    <p style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.25rem;">Fatura Atual</p>
-                </div>
-                <span class="close-modal" onclick="window.app.closeCardDetailsModal()">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div class="card-summary"
-                    style="background: var(--bg-primary); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <span style="font-size: 0.8rem; color: var(--text-secondary); display: block;">Total da
-                            Fatura</span>
-                        <span id="detailCardInvoice"
-                            style="font-size: 1.5rem; font-weight: 700; color: var(--red-color);">R$ 0,00</span>
-                        <span id="detailCardPeriod"
-                            style="font-size: 0.75rem; color: var(--text-secondary); display: block; margin-top: 4px;"></span>
-                    </div>
-                    <div>
-                        <span style="font-size: 0.8rem; color: var(--text-secondary); display: block;">Limite
-                            Disponível</span>
-                        <span id="detailCardLimit"
-                            style="font-size: 1.1rem; font-weight: 600; color: var(--green-color);">R$ 0,00</span>
-                    </div>
-                </div>
-
-                <div class="transactions-list-container" id="cardTransactionsList"
-                    style="max-height: 300px; overflow-y: auto; padding: 0.5rem;">
-                    <!-- Card Transactions (Divs) -->
-                </div>
-
-                <div class="form-actions" style="justify-content: space-between; margin-top: 1.5rem;">
-                    <button type="button" class="btn btn-outline"
-                        onclick="window.app.deleteCard(window.app.currentCardId); window.app.closeCardDetailsModal();"
-                        style="color: var(--red-color); border-color: var(--red-color);">
-                        <i class="fa-solid fa-trash"></i> Excluir Cartão
-                    </button>
-                    <div style="display: flex; gap: 8px;">
-                        <!-- Hidden File Input for CSV Import -->
-                        <input type="file" id="csvCardInput" accept=".csv" style="display: none;"
-                            onchange="window.app.handleCSVImport(this)">
-
-                        <button type="button" class="btn btn-outline"
-                            onclick="document.getElementById('csvCardInput').click()" title="Importar Extrato CSV">
-                            <i class="fa-solid fa-file-csv"></i> Importar
+                            onclick="window.app.deleteCard(window.app.currentCardId); window.app.closeCardDetailsModal();"
+                            style="color: var(--red-color); border-color: var(--red-color);">
+                            <i class="fa-solid fa-trash"></i> Excluir Cartão
                         </button>
-                        <button type="button" class="btn btn-primary" onclick="window.app.payInvoice()">
-                            <i class="fa-solid fa-check-double"></i> Pagar Fatura
-                        </button>
-                        <button type="button" class="btn btn-success"
-                            onclick="window.app.openModal(window.app.currentCardId)">
-                            <i class="fa-solid fa-plus"></i> Nova Compra
-                        </button>
+                        <div style="display: flex; gap: 8px;">
+                            <!-- Hidden File Input for CSV Import -->
+                            <input type="file" id="csvCardInput" accept=".csv" style="display: none;"
+                                onchange="window.app.handleCSVImport(this)">
+
+                            <button type="button" class="btn btn-outline"
+                                onclick="document.getElementById('csvCardInput').click()" title="Importar Extrato CSV">
+                                <i class="fa-solid fa-file-csv"></i> Importar
+                            </button>
+                            <button type="button" class="btn btn-primary" onclick="window.app.payInvoice()">
+                                <i class="fa-solid fa-check-double"></i> Pagar Fatura
+                            </button>
+                            <button type="button" class="btn btn-success"
+                                onclick="window.app.openModal(window.app.currentCardId)">
+                                <i class="fa-solid fa-plus"></i> Nova Compra
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
 
+    </div> <!-- End of #app -->
     <script>
         // Singleton Supabase Client Logic
         // This ensures createClient is only called once even if hot-reloaded or script re-runs
@@ -648,7 +755,7 @@
             }
         }
     </script>
-    <script src="app.js"></script>
+    <script src="app.js?v=12"></script>
 </body>
 
 </html>

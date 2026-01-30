@@ -43,6 +43,90 @@ class FinanceApp {
 
         this.cacheElements();
 
+        // AUTH INIT
+        this.cacheAuthElements();
+        this.bindAuthEvents();
+        this.bindCapsWarning();
+
+        const { data, error } = await this.supabase.auth.getSession();
+        if (data.session) {
+            this.onLoginSuccess(data.session.user);
+        } else {
+            this.showAuthScreen();
+        }
+    }
+
+    cacheAuthElements() {
+        this.auth = {
+            screen: document.getElementById('authScreen'),
+            app: document.getElementById('app'),
+            loginForm: document.getElementById('loginForm'),
+            email: document.getElementById('emailInput'),
+            pass: document.getElementById('passwordInput')
+        };
+    }
+
+    bindAuthEvents() {
+        if (this.auth.loginForm) {
+            this.auth.loginForm.onsubmit = (e) => this.handleLogin(e);
+        }
+    }
+
+    showAuthScreen() {
+        if (this.auth.screen && this.auth.app) {
+            this.auth.screen.classList.remove('hidden');
+            this.auth.screen.style.display = 'flex';
+            this.auth.app.style.display = 'none';
+        }
+    }
+
+    showAppScreen() {
+        if (this.auth.screen && this.auth.app) {
+            this.auth.screen.style.display = 'none';
+            this.auth.app.style.display = 'block';
+        }
+    }
+
+    async handleLogin(e) {
+        e.preventDefault();
+        const email = this.auth.email.value.trim();
+        const password = this.auth.pass.value;
+        const btn = this.auth.loginForm.querySelector('button');
+        const icon = btn.querySelector('i');
+        const span = btn.querySelector('span'); // Cache span
+
+        try {
+            // Loading State
+            if (span) span.innerText = 'Entrando...';
+            if (icon) icon.className = 'fa-solid fa-spinner fa-spin';
+
+            // SIGN IN ONLY (Registration Disabled)
+            const { data, error } = await this.supabase.auth.signInWithPassword({ email, password });
+
+            if (error) throw error;
+
+            if (data.session) {
+                this.onLoginSuccess(data.session.user);
+            } else {
+                throw new Error('Login sem sessão.');
+            }
+
+        } catch (error) {
+            console.error(error);
+            this.showToast('Erro: ' + error.message, 'error');
+        } finally {
+            // Reset Button State
+            if (span) span.innerText = 'Entrar';
+            if (icon) icon.className = 'fa-solid fa-arrow-right';
+        }
+    }
+
+    async onLoginSuccess(user) {
+        this.user = user;
+        this.showAppScreen();
+        this.showToast(`Bem-vindo, ${user.email.split('@')[0]}!`, 'success');
+
+        // Load App Data now
         // Date Init
         if (this.els.monthYear) {
             const now = new Date();
@@ -54,12 +138,78 @@ class FinanceApp {
             this.updateMonthLabel();
         }
 
+        this.setupInactivityTimer();
         this.bindEvents();
         this.initTheme();
 
-        this.showToast('Carregando...', 'info');
         await this.loadData();
         this.render();
+    }
+
+    setupInactivityTimer() {
+        const INACTIVITY_LIMIT = 30 * 60 * 1000; // 30 minutes
+        let lastActivity = Date.now();
+
+        const updateActivity = () => {
+            lastActivity = Date.now();
+        };
+
+        const checkInactivity = () => {
+            if (Date.now() - lastActivity > INACTIVITY_LIMIT) {
+                this.showToast('Sessão expirada por inatividade.', 'warning');
+                setTimeout(() => this.logout(), 2000);
+            }
+        };
+
+        // Check every minute if time has passed (handles background throttling/sleeping)
+        setInterval(checkInactivity, 60 * 1000);
+
+        // Events that record activity
+        const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+        events.forEach(event => {
+            document.addEventListener(event, updateActivity);
+        });
+    }
+
+    async logout() {
+        await this.supabase.auth.signOut();
+        window.location.reload();
+    }
+
+    togglePasswordVisibility() {
+        if (!this.auth.pass) {
+            this.auth.pass = document.getElementById('passwordInput');
+        }
+
+        const type = this.auth.pass.getAttribute('type') === 'password' ? 'text' : 'password';
+        this.auth.pass.setAttribute('type', type);
+
+        const icon = this.auth.loginForm.querySelector('.password-toggle');
+        if (icon) {
+            icon.className = type === 'password' ? 'fa-solid fa-eye password-toggle' : 'fa-solid fa-eye-slash password-toggle';
+        }
+    }
+
+    bindCapsWarning() {
+        const passInput = document.getElementById('passwordInput');
+        const warning = document.getElementById('capsLockWarning');
+
+        if (!passInput || !warning) return;
+
+        const checkCaps = (e) => {
+            if (typeof e.getModifierState !== 'function') return;
+
+            if (e.getModifierState("CapsLock")) {
+                warning.classList.remove('hidden');
+            } else {
+                warning.classList.add('hidden');
+            }
+        };
+
+        passInput.addEventListener('keyup', checkCaps);
+        passInput.addEventListener('keydown', checkCaps);
+        passInput.addEventListener('click', checkCaps);
+        passInput.addEventListener('focus', checkCaps);
     }
 
     cacheElements() {
@@ -79,7 +229,7 @@ class FinanceApp {
             monthBalance: document.getElementById('monthlyBalanceDisplay'),
             finalBalance: document.getElementById('finalBalanceDisplay'),
 
-            transList: document.getElementById('transactionsBody'),
+            transList: document.getElementById('transactionsList'),
             categoriesList: document.getElementById('categoriesList'),
             fixedIncomeList: document.getElementById('fixedIncomeBody'),
             fixedExpensesList: document.getElementById('fixedExpensesBody'),
@@ -187,6 +337,20 @@ class FinanceApp {
             const i = themeBtn.querySelector('i');
             if (i) i.classList.contains('fa-sun') ? i.classList.replace('fa-sun', 'fa-moon') : i.classList.replace('fa-moon', 'fa-sun');
         };
+
+        // Privacy Mode Init
+        const savedPrivacy = localStorage.getItem('privacy_mode');
+        if (savedPrivacy === 'true') {
+            document.body.classList.add('privacy-mode');
+        }
+    }
+
+    togglePrivacy() {
+        document.body.classList.toggle('privacy-mode');
+        const isPrivacy = document.body.classList.contains('privacy-mode');
+        localStorage.setItem('privacy_mode', isPrivacy);
+        // Using the GOOD showToast method (lines 1265+)
+        this.showToast(isPrivacy ? 'Modo Privacidade Ativado 👀' : 'Modo Privacidade Desativado 👁️', 'info');
     }
 
     // --- DATA FETCHING (Corrected) ---
@@ -380,13 +544,41 @@ class FinanceApp {
     }
 
     openFixedModal() { this.renderCategoryOptions(); if (this.els.fixedModal) this.els.fixedModal.classList.add('active'); }
+
+    setFixedType(type) {
+        const input = document.getElementById('fixedType');
+        const btnInc = document.getElementById('btnFixedIncome');
+        const btnExp = document.getElementById('btnFixedExpense');
+
+        if (input) input.value = type;
+
+        if (type === 'income') {
+            btnInc.classList.add('active');
+            btnExp.classList.remove('active');
+        } else {
+            btnExp.classList.add('active');
+            btnInc.classList.remove('active');
+        }
+    }
+
     async handleFixedSubmit(e) {
         e.preventDefault();
         const getVal = (id) => document.getElementById(id) ? document.getElementById(id).value : '';
-        const fix = { dia_vencimento: parseInt(getVal('fixedDay')), descricao: getVal('fixedDesc'), categoria: getVal('fixedCategory'), valor: parseFloat(getVal('fixedValue')) };
-        let tEl = document.querySelector('input[name="fixedType"]:checked'); if (tEl) fix.tipo = tEl.value;
+        const fix = {
+            dia_vencimento: parseInt(getVal('fixedDay')),
+            descricao: getVal('fixedDesc'),
+            categoria: getVal('fixedCategory'),
+            valor: parseFloat(getVal('fixedValue')),
+            tipo: getVal('fixedType') || 'expense'
+        };
+
         const { data, error } = await this.supabase.from('despesas_fixas').insert([fix]).select();
-        if (!error) { this.fixedExpenses.push(data[0]); this.success('Fixo Salvo'); } else this.error(error.message);
+        if (!error) {
+            this.fixedExpenses.push(data[0]);
+            this.showToast('Fixo Salvo', 'success');
+            this.closeFixedModal();
+            this.render();
+        } else this.showToast(error.message, 'error');
     }
     async deleteFixedExpense(id) {
         if (!confirm('Excluir?')) return;
@@ -435,6 +627,14 @@ class FinanceApp {
     }
 
     openCardModal() { if (this.els.cardModal) this.els.cardModal.classList.add('active'); }
+
+    setCardColor(color, el) {
+        document.getElementById('cardColor').value = color;
+        // Visual feedback
+        document.querySelectorAll('#cardForm .color-option').forEach(c => c.classList.remove('active'));
+        if (el) el.classList.add('active');
+    }
+
     async handleCardSubmit(e) {
         e.preventDefault();
         const getVal = (id) => document.getElementById(id) ? document.getElementById(id).value : '';
@@ -458,6 +658,14 @@ class FinanceApp {
     }
 
     openGoalModal() { if (this.els.goalModal) this.els.goalModal.classList.add('active'); }
+
+    setGoalColor(color, el) {
+        document.getElementById('goalColor').value = color;
+        // Visual feedback
+        document.querySelectorAll('.color-option').forEach(c => c.classList.remove('active'));
+        if (el) el.classList.add('active');
+    }
+
     async handleGoalSubmit(e) {
         e.preventDefault();
         const getVal = (id) => document.getElementById(id) ? document.getElementById(id).value : '';
@@ -547,13 +755,17 @@ class FinanceApp {
     renderGoals() {
         if (!this.els.goalsList) return;
 
+        // "Add Goal" Placeholder Card HTML
+        const addGoalHtml = `
+            <div class="goal-add-placeholder" onclick="window.app.openGoalModal()">
+                <div class="goal-add-icon">
+                    <i class="fa-solid fa-plus"></i>
+                </div>
+                <span style="font-weight: 600;">Nova Meta</span>
+            </div>`;
+
         if (this.goals.length === 0) {
-            this.els.goalsList.innerHTML = `
-                <div class="trans-empty-state">
-                    <div class="empty-icon"><i class="fa-solid fa-bullseye"></i></div>
-                    <div class="empty-text">Nenhuma meta definida.</div>
-                    <div class="empty-subtext">Clique em + Nova Meta para começar a economizar.</div>
-                </div>`;
+            this.els.goalsList.innerHTML = addGoalHtml;
             return;
         }
 
@@ -579,7 +791,7 @@ class FinanceApp {
             return `
             <div class="goal-card">
                 <div class="goal-header">
-                    <div class="goal-icon" style="color: ${barColor}">${icon}</div>
+                    <div class="goal-icon" style="color: ${barColor}; background: ${barColor}1a;">${icon}</div>
                     <div class="goal-title">${g.name}</div>
                 </div>
 
@@ -593,20 +805,24 @@ class FinanceApp {
                 </div>
 
                 <div class="goal-center">
-                    <div class="goal-percentage" style="color: ${barColor}">${displayPct}%</div>
-                    <div class="goal-progress-bg">
-                        <div class="goal-progress-fill" style="width: ${visualPct}%; background-color: ${barColor}"></div>
+                    <!-- Dynamic Gradient Text -->
+                    <div class="goal-percentage" style="background: linear-gradient(to bottom, ${barColor}, #ffffff); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">${displayPct}%</div>
+                    <div class="goal-values">
+                        <span class="curr">${this.formatCurrency(current)}</span>
+                        <span class="sep">/</span>
+                        <span class="targ">${this.formatCurrency(target)}</span>
                     </div>
                 </div>
 
-                <div class="goal-footer">
-                    <span>${this.formatCurrency(current)}</span>
-                    <span>${this.formatCurrency(target)}</span>
+                <div class="goal-row-bottom">
+                    <div class="goal-progress-container">
+                        <div class="goal-progress-bar" style="width: ${visualPct}%; background: linear-gradient(90deg, ${barColor}, ${barColor}dd); box-shadow: 0 0 15px ${barColor}4d;"></div>
+                    </div>
                 </div>
             </div>`;
         }).join('');
 
-        this.els.goalsList.innerHTML = `<div class="goals-grid">${html}</div>`;
+        this.els.goalsList.innerHTML = html + addGoalHtml;
     }
 
     // Stub for edit to prevent error
@@ -698,93 +914,80 @@ class FinanceApp {
 
 
         // --- TRANSACTIONS LIST RENDERING ---
+        // --- TRANSACTIONS LIST RENDERING (GLASS CARDS) ---
         if (this.els.transList) {
-            const tableEl = this.els.transList.closest('table');
-            const containerEl = tableEl ? tableEl.parentElement : null;
+            // Un-hide container if hidden
+            const containerEl = this.els.transList.parentElement;
 
             if (monthTrans.length === 0) {
-                // EMPTY STATE
-                if (tableEl) tableEl.style.display = 'none';
-
-                // Check if empty state already exists
-                let emptyState = containerEl.querySelector('.trans-empty-state');
-                if (!emptyState) {
-                    emptyState = document.createElement('div');
-                    emptyState.className = 'trans-empty-state';
-                    emptyState.innerHTML = `
+                this.els.transList.innerHTML = `
+                    <div class="trans-empty-state">
                         <div class="empty-icon"><i class="fa-regular fa-folder-open"></i></div>
                         <div class="empty-text">Nenhuma movimentação neste período.</div>
                         <div class="empty-subtext">Clique em + Adicionar para começar.</div>
-                    `;
-                    if (containerEl) containerEl.appendChild(emptyState);
-                } else {
-                    emptyState.style.display = 'flex';
-                }
+                    </div>`;
             } else {
-                // HAS DATA
-                if (tableEl) tableEl.style.display = 'table';
-                const existingEmpty = containerEl ? containerEl.querySelector('.trans-empty-state') : null;
-                if (existingEmpty) existingEmpty.style.display = 'none';
-
                 this.els.transList.innerHTML = monthTrans.map(t => {
-                    const metaDesc = t.card_id ? ' <i class="fa-regular fa-credit-card text-blue-400"></i>' : (t.installment_total ? ` (${t.installment_current}/${t.installment_total})` : '');
+                    const metaDesc = t.card_id ? '<i class="fa-regular fa-credit-card"></i>' : (t.installment_total ? `<span class="inst-badge">${t.installment_current}/${t.installment_total}</span>` : '');
+                    const icon = this.getCategoryIcon(t.categoria);
+                    const isExp = t.tipo === 'expense';
+                    const valColor = isExp ? 'text-red-400' : 'text-green-400';
+                    const amountSign = isExp ? '-' : '+';
 
                     return `
-                    <tr>
-                        <!-- Col 1: DATE -->
-                        <td class="py-4 font-bold text-gray-400">
-                             ${this.formatDate(t.data)}
-                        </td>
-
-                        <!-- Col 2: DESCRIPTION -->
-                        <td class="py-4 font-bold text-white">
-                            ${t.descricao} ${metaDesc}
-                        </td>
-
-                        <!-- Col 3: CATEGORY -->
-                        <td class="py-4">
-                            <div class="flex items-center gap-2" style="display:flex; align-items:center; gap:0.5rem">
-                                <div class="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center text-lg" style="width:32px; height:32px; background:#374151; border-radius:50%; display:flex; align-items:center; justify-content:center;">
-                                    ${this.getCategoryIcon(t.categoria)}
-                                </div>
-                                <span class="text-gray-300">${t.categoria}</span>
+                    <div class="trans-card">
+                        <div class="trans-icon-box">${icon}</div>
+                        
+                        <div class="trans-details">
+                            <div class="trans-title">${t.descricao} ${metaDesc}</div>
+                            <div class="trans-meta">
+                                <span>${this.formatDate(t.data)}</span>
+                                <span class="dot">•</span>
+                                <span>${t.categoria}</span>
                             </div>
-                        </td>
+                        </div>
 
-                        <!-- Col 4: TYPE -->
-                        <td class="py-4">
-                            <span class="${t.tipo === 'income' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'} px-2 py-1 rounded text-xs font-bold uppercase" style="padding:4px 8px; border-radius:12px; font-size:0.75rem; background:${t.tipo === 'income' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)'}; color:${t.tipo === 'income' ? '#34d399' : '#f87171'}">
-                                ${t.tipo === 'income' ? 'Receita' : 'Despesa'}
-                            </span>
-                        </td>
-
-                        <!-- Col 5: VALUE -->
-                        <td class="py-4 font-bold text-lg ${t.type === 'income' ? 'text-emerald-400' : 'text-red-400'}" style="color:${t.tipo === 'income' ? '#34d399' : '#f87171'}; font-size:1.1rem; font-weight:bold;">
-                            ${t.tipo === 'expense' ? '-' : '+'} ${this.formatCurrency(t.valor)}
-                        </td>
-
-                        <!-- Col 6: ACTION -->
-                        <td class="py-4 text-center" style="text-align:center">
-                            <button onclick="window.app.deleteTransaction('${t.id}')" class="text-gray-500 hover:text-red-500 transition-colors p-2" style="border:none; background:none; cursor:pointer; color:#6b7280;">
-                                ${TRASH_ICON}
-                            </button>
-                        </td>
-                    </tr>`;
+                        <div class="trans-right">
+                             <div class="trans-amount ${valColor}">
+                                ${amountSign} ${this.formatCurrency(t.valor)}
+                             </div>
+                             <div class="trans-actions">
+                                <button onclick="window.app.approveTransaction('${t.id}')" title="${t.efetivado ? 'Desmarcar' : 'Efetivar'}" class="action-btn ${t.efetivado ? 'done' : ''}">
+                                    <i class="fa-solid fa-check"></i>
+                                </button>
+                                <button onclick="window.app.deleteTransaction('${t.id}')" title="Excluir" class="action-btn delete">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                             </div>
+                        </div>
+                    </div>`;
                 }).join('');
             }
+
+            // Update Count
+            const countEl = document.getElementById('transCount');
+            if (countEl) countEl.innerText = `${monthTrans.length} Registros`;
         }
 
 
 
         if (this.els.categoriesList) {
-            this.els.categoriesList.innerHTML = this.categories.map(c => `
+            const addCard = `
+            <div class="category-card category-add-card" onclick="window.app.addCategory()">
+                <div class="category-icon"><i class="fa-solid fa-plus"></i></div>
+                <div class="category-name">Nova Categoria</div>
+            </div>`;
+
+            const cards = this.categories.map(c => `
             <div class="category-card">
-                <div class="category-icon">${this.getCategoryIcon(c)}</div>
-                <div class="category-name">${c}</div>
-                <button class="category-delete-btn" onclick="window.app.deleteCategory('${c}')" title="Excluir Categoria">
+                <button class="category-delete-btn" onclick="event.stopPropagation(); window.app.deleteCategory('${c}')" title="Excluir">
                     <i class="fa-solid fa-trash-can"></i>
                 </button>
+                <div class="category-icon">${this.getCategoryIcon(c)}</div>
+                <div class="category-name">${c}</div>
             </div>`).join('');
+
+            this.els.categoriesList.innerHTML = addCard + cards;
         }
 
         // --- STRICT BALANCE CALCULATION ---
@@ -795,7 +998,8 @@ class FinanceApp {
             const val = Math.abs(parseFloat(t.valor) || 0); // Force positive magnitude
             if (t.tipo === 'income') {
                 totalIncome += val;
-            } else if (t.tipo === 'expense' && t.efetivado !== false) {
+            } else if (t.tipo === 'expense' && t.efetivado !== false && !t.card_id) {
+                // FIXED: Only count expenses that are NOT on credit card (Credit Card expenses are paid via Invoice)
                 totalExpense += val;
             }
         });
@@ -810,29 +1014,28 @@ class FinanceApp {
 
         // Format and Style Monthly Balance
         this.setText(this.els.monthBalance, this.formatCurrency(totalBalance));
-        this.els.monthBalance.className = 'card-value'; // Reset
-        // Using 'text-red-400' and 'text-green-400' (or blue) to match theme, user asked red/blue/white.
-        // Assuming Tailwind/Bootstrap colors are available or defined in CSS.
-        // Using inline style for safety if classes aren't perfect, or standard internal classes.
-        if (totalBalance < 0) {
-            this.els.monthBalance.classList.add('text-red'); // Custom CSS class usually defined
-            this.els.monthBalance.style.color = '#ef4444';
-        } else {
-            this.els.monthBalance.classList.add('text-green');
-            this.els.monthBalance.style.color = '#10b981';
+        this.els.monthBalance.className = 'card-value sensitive'; // Reset + Ensure Sensitive
+
+        const monthCard = this.els.monthBalance.closest('.card');
+        if (monthCard) {
+            monthCard.classList.remove('card-green', 'card-red', 'card-blue', 'card-purple');
+            monthCard.classList.add(totalBalance < 0 ? 'card-red' : 'card-blue');
         }
 
         this.setText(this.els.finalBalance, this.formatCurrency(finalBal));
+        this.els.finalBalance.className = 'card-value sensitive';
+
+        const finalCard = this.els.finalBalance.closest('.card');
+        if (finalCard) {
+            finalCard.classList.remove('card-green', 'card-red', 'card-blue', 'card-purple');
+            finalCard.classList.add(finalBal < 0 ? 'card-red' : 'card-purple');
+        }
 
         this.renderProjectionCharts(monthTrans);
 
-
         if (this.els.cardsList) {
-            this.els.cardsList.innerHTML = this.cards.map(c => {
+            const cardItems = this.cards.map(c => {
                 // Calculate Invoice Total for this Month/Cycle
-                // Note: monthTrans is arguably already filtered by month/year, but for cards it's complex because of cycles.
-                // Reusing the simple filter here for visual summary:
-                // Sum all expense transactions for this card_id in 'monthTrans'
                 const cardTotal = monthTrans.reduce((acc, t) => {
                     return (t.card_id === c.id && t.tipo === 'expense' && t.efetivado !== false) ? acc + t.valor : acc;
                 }, 0);
@@ -841,39 +1044,50 @@ class FinanceApp {
                 const available = limit - cardTotal;
                 const progress = limit > 0 ? Math.min((cardTotal / limit) * 100, 100) : 0;
 
-                // Color manipulation for gradient (simple darken)
+                // Color fallback
                 const color = c.color || '#3b82f6';
+                // We use inline style for the specific card color gradient
+                // The class .credit-card handles the glass overlay and noise
 
                 return `
                 <div class="credit-card" 
-                     style="background: linear-gradient(135deg, ${color}, ${color}DD); box-shadow: 0 10px 20px -5px ${color}66;"
+                     style="background: linear-gradient(135deg, ${color}, ${color}CC);"
                      onclick="window.app.openCardDetails('${c.id}')">
                     
                     <div class="card-top">
                         <div class="card-chip"></div>
-                        <h4>${c.name}</h4>
+                        <h4 style="font-size: 1.2rem; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">${c.name}</h4>
                     </div>
 
-                    <div class="card-middle">
-                        <div class="card-invoice-label">Fatura Atual</div>
-                        <div class="card-invoice-value">${this.formatCurrency(cardTotal)}</div>
+                    <div class="card-middle" style="margin-top: auto; margin-bottom: 1rem;">
+                        <div class="card-invoice-label" style="font-size: 0.8rem; opacity: 0.8;">Fatura Atual</div>
+                        <div class="card-invoice-value" style="font-size: 1.8rem; font-weight: 700; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">
+                            ${this.formatCurrency(cardTotal)}
+                        </div>
                     </div>
 
                     <div class="card-bottom">
-                        <div class="card-limit-info">
+                        <div class="card-limit-info" style="display:flex; justify-content:space-between; font-size: 0.85rem; margin-bottom: 6px; font-weight: 500;">
                             <span>Disp: ${this.formatCurrency(available)}</span>
                             <span>${Math.round(progress)}%</span>
                         </div>
-                        <div class="card-progress-bg">
-                            <div class="card-progress-fill" style="width: ${progress}%"></div>
+                        <div class="card-progress-bg" style="background: rgba(255,255,255,0.2); height: 6px; border-radius: 3px; overflow:hidden;">
+                            <div class="card-progress-fill" style="width: ${progress}%; background: white; height: 100%; box-shadow: 0 0 10px rgba(255,255,255,0.5);"></div>
                         </div>
                     </div>
                 </div>`;
-            }).join('') + `
-            <div class="credit-card empty-slot" onclick="window.app.openCardModal()">
-                <div class="new-card-icon"><i class="fa-solid fa-plus"></i></div>
-                <div>Novo Cartão</div>
+            }).join('');
+
+            // Add Card Placeholder
+            const addCardHtml = `
+            <div class="card-add-placeholder" onclick="window.app.openCardModal()">
+                <div class="card-add-icon">
+                    <i class="fa-solid fa-plus"></i>
+                </div>
+                <span style="font-weight: 600;">Novo Cartão</span>
             </div>`;
+
+            this.els.cardsList.innerHTML = cardItems + addCardHtml;
         }
 
 
@@ -915,8 +1129,8 @@ class FinanceApp {
 
     // --- CATEGORY MANAGEMENT ---
     async addCategory() {
-        const input = document.getElementById('newCategoryInput');
-        let name = input ? input.value : prompt('Nome da nova categoria:');
+        // Fallback to prompt if no input found (or if calling from card)
+        let name = prompt('🌟 Nome da nova categoria:');
 
         if (!name) return;
         name = name.trim();
@@ -926,10 +1140,9 @@ class FinanceApp {
         }
 
         this.categories.push(name);
-        if (input) input.value = '';
-        this.render();
+        this.render(); // Will render the new card inside the grid
         this.saveCategories();
-        this.showToast('Categoria adicionada');
+        this.showToast('Categoria adicionada', 'success');
     }
 
     async deleteCategory(name) {
@@ -980,15 +1193,17 @@ class FinanceApp {
                         label: 'Receitas',
                         data: incomeData,
                         backgroundColor: '#10b981', // Green
-                        borderRadius: 4,
-                        maxBarThickness: 10
+                        borderRadius: 20, // Rounded Bars
+                        borderSkipped: false, // Round all corners
+                        barThickness: 12,
                     },
                     {
                         label: 'Despesas',
                         data: expenseData,
                         backgroundColor: '#ef4444', // Red
-                        borderRadius: 4,
-                        maxBarThickness: 10
+                        borderRadius: 20, // Rounded Bars
+                        borderSkipped: false,
+                        barThickness: 12,
                     }
                 ]
             },
@@ -1042,28 +1257,60 @@ class FinanceApp {
                         {
                             label: 'Receitas',
                             data: incomeData,
-                            backgroundColor: '#10b981',
+                            backgroundColor: (context) => {
+                                const ctx = context.chart.ctx;
+                                const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+                                gradient.addColorStop(0, '#34d399'); // Neon Green
+                                gradient.addColorStop(1, 'rgba(52, 211, 153, 0.1)');
+                                return gradient;
+                            },
                             borderRadius: 4,
+                            borderSkipped: false,
                             barPercentage: 0.6,
-                            categoryPercentage: 0.8
                         },
                         {
                             label: 'Despesas',
                             data: expenseData,
-                            backgroundColor: '#ef4444',
+                            backgroundColor: (context) => {
+                                const ctx = context.chart.ctx;
+                                const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+                                gradient.addColorStop(0, '#f87171'); // Neon Red
+                                gradient.addColorStop(1, 'rgba(248, 113, 113, 0.1)');
+                                return gradient;
+                            },
                             borderRadius: 4,
+                            borderSkipped: false,
                             barPercentage: 0.6,
-                            categoryPercentage: 0.8
                         }
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { labels: { color: '#fff' } } },
+                    plugins: {
+                        legend: { labels: { color: '#e5e7eb', usePointStyle: true, font: { family: "'Inter', sans-serif" } } },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                            titleColor: '#fff',
+                            bodyColor: '#e5e7eb',
+                            borderColor: 'rgba(255,255,255,0.1)',
+                            borderWidth: 1,
+                            padding: 10,
+                            cornerRadius: 8
+                        }
+                    },
                     scales: {
-                        x: { grid: { display: false }, ticks: { color: '#9ca3af' } },
-                        y: { grid: { display: false }, ticks: { color: '#9ca3af' } }
+                        x: {
+                            grid: { display: false, drawBorder: false },
+                            ticks: { color: '#9ca3af', font: { size: 10 } }
+                        },
+                        y: {
+                            grid: { display: true, color: 'rgba(255, 255, 255, 0.05)', drawBorder: false }, // Subtle guidelines
+                            border: { display: false },
+                            ticks: { color: '#9ca3af', font: { size: 10 }, callback: (value) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumSignificantDigits: 1 }) }
+                        }
                     }
                 }
             });
@@ -1112,12 +1359,44 @@ class FinanceApp {
         }
     }
 
+    showToast(message, type = 'info') {
+        let container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            document.body.appendChild(container);
+        }
+
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.innerHTML = `
+            <i class="fa-solid ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info'}"></i>
+            <span>${message}</span>
+        `;
+
+        container.appendChild(toast);
+
+        // Animation Entry
+        requestAnimationFrame(() => {
+            toast.style.transform = 'translateY(0)';
+            toast.style.opacity = '1';
+        });
+
+        // Removal
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(-20px)';
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
     setText(el, text) {
         if (!el) return;
-        if (text && text.includes('R$') && !isNaN(parseFloat(text.replace(/[^\d,]/g, '').replace(',', '.')))) {
-            const endVal = parseFloat(text.replace(/[^\d,]/g, '').replace(',', '.'));
+        // UPDATED REGEX: Include '-' to allow negative numbers logic
+        if (text && text.includes('R$') && !isNaN(parseFloat(text.replace(/[^\d,-]/g, '').replace(',', '.')))) {
+            const endVal = parseFloat(text.replace(/[^\d,-]/g, '').replace(',', '.'));
             const currentStr = el.innerText;
-            const startVal = currentStr && currentStr.includes('R$') ? parseFloat(currentStr.replace(/[^\d,]/g, '').replace(',', '.')) : 0;
+            const startVal = currentStr && currentStr.includes('R$') ? parseFloat(currentStr.replace(/[^\d,-]/g, '').replace(',', '.')) : 0;
             if (startVal !== endVal) {
                 this.animateValue(el, startVal, endVal, 1500);
             } else {
@@ -1242,11 +1521,8 @@ class FinanceApp {
         const devedor = getVal('recName');
         const descBase = getVal('recDesc');
 
-        // FIX: Handle "1.000,00" format correctly
-        let valStr = getVal('recValue');
-        // Remove dots (thousands) and replace comma with dot (decimal)
-        valStr = valStr.replace(/\./g, '').replace(',', '.');
-        const totalVal = parseFloat(valStr) || 0;
+        // Simple float parse for number input
+        const totalVal = parseFloat(getVal('recValue')) || 0;
 
         const dateStr = getVal('recDate');
         let installments = parseInt(getVal('recInstallments')) || 1;
@@ -1373,7 +1649,6 @@ class FinanceApp {
     }
     success(msg) { this.showToast(msg, 'success'); this.closeAllModals(); this.render(); }
     error(msg) { this.showToast(msg, 'error'); }
-    showToast(msg, type = 'info') { const t = document.createElement('div'); t.className = `toast toast-${type}`; t.innerText = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 3000); }
     payInvoice() {
         if (!confirm('Pagar Fatura?')) return;
         const amtStr = this.els.detailCardInvoice ? this.els.detailCardInvoice.innerText : '0';
