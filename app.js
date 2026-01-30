@@ -998,9 +998,13 @@ class FinanceApp {
             const val = Math.abs(parseFloat(t.valor) || 0); // Force positive magnitude
             if (t.tipo === 'income') {
                 totalIncome += val;
-            } else if (t.tipo === 'expense' && t.efetivado !== false && !t.card_id) {
-                // FIXED: Only count expenses that are NOT on credit card (Credit Card expenses are paid via Invoice)
-                totalExpense += val;
+            } else if (t.tipo === 'expense' && t.efetivado !== false) {
+                // FIXED: Accrual Basis (Competência)
+                // 1. Include Credit Card Expenses (so they match the list)
+                // 2. EXCLUDE "Fatura" payments (to avoid double counting the same money)
+                if (!t.descricao.startsWith('Fatura')) {
+                    totalExpense += val;
+                }
             }
         });
 
@@ -1179,7 +1183,7 @@ class FinanceApp {
             if (day >= 1 && day <= daysInMonth) {
                 const val = Math.abs(parseFloat(t.valor) || 0);
                 if (t.tipo === 'income') incomeData[day - 1] += val;
-                else if (t.tipo === 'expense') expenseData[day - 1] += val;
+                else if (t.tipo === 'expense' && !t.card_id) expenseData[day - 1] += val; // Exclude credit card (Cash Flow)
             }
         });
 
@@ -1245,7 +1249,7 @@ class FinanceApp {
                 const day = parseInt(t.data.split('-')[2]);
                 if (day >= 1 && day <= daysInMonth) {
                     if (t.tipo === 'income') incomeData[day - 1] += t.valor;
-                    else if (t.tipo === 'expense') expenseData[day - 1] += t.valor;
+                    else if (t.tipo === 'expense' && !t.card_id) expenseData[day - 1] += t.valor; // Exclude credit card
                 }
             });
 
